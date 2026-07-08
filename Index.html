@@ -1,0 +1,1900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Impose — PDF Imposition Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#eef1ef; --paper-alt:#e3e8e5; --ink:#15181a; --ink-soft:#4a5257;
+    --line:#c6cdc9; --line-soft:#d8ddda; --press:#2e4b6e; --press-soft:#dfe6ee;
+    --signal:#bf3b2a; --white:#fbfbf9; --radius:2px;
+    --mono:'Space Mono', monospace; --sans:'Inter', -apple-system, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper); color:var(--ink); font-family:var(--sans); min-height:100vh;
+    background-image:linear-gradient(var(--line-soft) 1px, transparent 1px),linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+    background-size:28px 28px; background-attachment:fixed;
+  }
+  .app{max-width:1280px;margin:0 auto;padding:28px 24px 80px;}
+  header{display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:24px;flex-wrap:wrap;gap:8px;}
+  .wordmark{font-family:var(--mono);font-weight:700;font-size:22px;letter-spacing:2px;display:flex;align-items:center;gap:10px;}
+  .wordmark .mark{width:14px;height:14px;border:2px solid var(--signal);position:relative;flex:none;}
+  .wordmark .mark::before,.wordmark .mark::after{content:'';position:absolute;background:var(--signal);}
+  .wordmark .mark::before{left:50%;top:-5px;width:1px;height:24px;transform:translateX(-50%);}
+  .wordmark .mark::after{top:50%;left:-5px;height:1px;width:24px;transform:translateY(-50%);}
+  header .tagline{font-size:13px;color:var(--ink-soft);max-width:360px;text-align:right;}
+  .layout{display:grid;grid-template-columns:360px 1fr;gap:22px;align-items:start;}
+  @media (max-width:900px){.layout{grid-template-columns:1fr;}}
+  .panel{background:var(--white);border:1px solid var(--ink);border-radius:var(--radius);padding:20px;position:sticky;top:20px;max-height:calc(100vh - 40px);overflow-y:auto;}
+  @media (max-width:900px){.panel{position:static;max-height:none;}}
+
+  .section-label{font-family:var(--mono);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink-soft);margin:0 0 10px;display:flex;align-items:center;gap:8px;}
+  .section-label::after{content:'';flex:1;height:1px;background:var(--line);}
+  .section-block{margin-bottom:20px;padding-bottom:18px;border-bottom:1px solid var(--line-soft);}
+  .section-block:last-child{border-bottom:none;}
+
+  .dropzone{border:1.5px dashed var(--ink-soft);border-radius:var(--radius);padding:26px 14px;text-align:center;cursor:pointer;background:var(--paper-alt);transition:border-color .15s, background .15s;}
+  .dropzone:hover, .dropzone.drag{border-color:var(--press);background:var(--press-soft);}
+  .dropzone p{margin:6px 0 0;font-size:12.5px;color:var(--ink-soft);}
+  .dropzone strong{font-size:13.5px;}
+  .dropzone input{display:none;}
+  .file-list{display:flex;flex-direction:column;gap:6px;}
+  .file-dropdown{border:none;margin-bottom:2px;}
+  .file-dropdown summary{cursor:pointer;font-weight:600;font-size:12.5px;padding:6px 2px;list-style:none;color:var(--ink);display:flex;align-items:center;gap:6px;}
+  .file-dropdown summary::-webkit-details-marker{display:none;}
+  .file-dropdown summary::after{content:'▾';margin-left:auto;color:var(--ink-soft);transition:transform .15s;}
+  .file-dropdown[open] summary::after{transform:rotate(180deg);}
+  .file-dropdown .file-list{margin-top:6px;}
+  .x-remove{background:none;border:none;color:var(--ink-soft);cursor:pointer;font-size:15px;line-height:1;padding:2px 5px;flex:none;border-radius:var(--radius);}
+  .x-remove:hover{color:var(--signal);background:rgba(191,59,42,.08);}
+  .anchor-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;width:126px;}
+  .anchor-cell{aspect-ratio:1;border:1px solid var(--line);border-radius:var(--radius);background:var(--white);cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .anchor-cell:hover{border-color:var(--press);}
+  .anchor-cell.active{border-color:var(--press);background:var(--press-soft);}
+  .anchor-cell .dot{width:10px;height:10px;background:var(--press);border-radius:2px;display:none;}
+  .anchor-cell.active .dot{display:block;}
+  .step-badge{
+    display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:1px;text-transform:uppercase;
+    background:var(--ink);color:var(--white);padding:3px 8px;border-radius:var(--radius);margin-bottom:8px;
+  }
+  .add-step-btn{
+    width:100%;margin-top:14px;padding:9px;background:var(--paper-alt);border:1.5px dashed var(--ink-soft);
+    border-radius:var(--radius);color:var(--ink);font-family:var(--mono);font-size:12px;letter-spacing:.5px;
+    cursor:pointer;
+  }
+  .add-step-btn:hover{border-color:var(--press);color:var(--press);background:var(--press-soft);}
+  .step-card{border:1px solid var(--ink);border-radius:var(--radius);background:var(--white);padding:16px;margin-bottom:16px;}
+  .step-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  .step-card-head .step-badge{margin-bottom:0;}
+  .step-type-seg{display:flex;border:1px solid var(--ink);border-radius:var(--radius);overflow:hidden;margin-bottom:12px;}
+  .step-type-seg button{flex:1;padding:7px 6px;background:var(--white);border:none;border-right:1px solid var(--ink);font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;color:var(--ink);}
+  .step-type-seg button:last-child{border-right:none;}
+  .step-type-seg button.active{background:var(--ink);color:var(--white);}
+  .rotate-picker{display:flex;flex-direction:column;gap:8px;}
+  .rotate-option{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;height:26px;}
+  .rotate-option input{accent-color:var(--press);}
+  .rtext{font-weight:600;display:inline-block;font-size:13px;}
+  .rtext.r0{transform:none;}
+  .rtext.r90{transform:rotate(-90deg);}
+  .rtext.r180{transform:rotate(180deg);}
+  .rtext.r270{transform:rotate(90deg);}
+  .file-chip{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--paper-alt);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;font-size:12.5px;cursor:pointer;}
+  .file-chip.active{border-color:var(--press);background:var(--press-soft);}
+  .file-chip .remove, .clear-all{background:none;border:none;color:var(--signal);cursor:pointer;font-size:12px;font-family:var(--sans);text-decoration:underline;padding:0;}
+  .clear-all{text-align:left;}
+  .file-chip .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .file-chip button{background:none;border:none;color:var(--signal);cursor:pointer;font-size:12px;font-family:var(--sans);text-decoration:underline;padding:0;}
+
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:5px;font-weight:500;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+  .row4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;}
+
+  select, input[type=number]{width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:var(--radius);background:var(--white);color:var(--ink);font-family:var(--sans);font-size:13px;}
+  select:disabled,input:disabled{background:var(--paper-alt);color:var(--line);}
+  select:focus, input:focus{outline:2px solid var(--press);outline-offset:1px;}
+
+  .widthheight{display:flex;align-items:flex-end;gap:8px;}
+  .lockbtn{flex:none;width:34px;height:34px;border:1px solid var(--ink);background:var(--white);border-radius:var(--radius);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
+  .lockbtn.active{background:var(--ink);color:var(--white);}
+
+  .segmented{display:flex;border:1px solid var(--ink);border-radius:var(--radius);overflow:hidden;}
+  .segmented button{flex:1;padding:9px 6px;background:var(--white);border:none;border-right:1px solid var(--ink);font-family:var(--sans);font-size:12.5px;font-weight:600;cursor:pointer;color:var(--ink);}
+  .segmented button:last-child{border-right:none;}
+  .segmented button.active{background:var(--ink);color:var(--white);}
+
+  .presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+  .presets button{font-family:var(--mono);font-size:11px;padding:5px 9px;border:1px solid var(--line);background:var(--paper-alt);border-radius:var(--radius);cursor:pointer;color:var(--ink-soft);}
+  .presets button:hover{border-color:var(--press);color:var(--press);}
+
+  .iconpick{display:flex;gap:8px;margin-top:6px;}
+  .iconpick button{flex:1;border:1.5px solid var(--line);background:var(--white);border-radius:var(--radius);padding:8px;cursor:pointer;}
+  .iconpick button.active{border-color:var(--press);background:var(--press-soft);}
+  .iconpick svg{display:block;margin:0 auto;}
+  .iconpick .cap{display:block;text-align:center;font-size:10px;color:var(--ink-soft);margin-top:4px;}
+
+  .checkline{display:flex;align-items:center;gap:8px;font-size:12.5px;margin-bottom:9px;color:var(--ink);}
+  .checkline input{accent-color:var(--press);}
+  .checkline.sub{padding-left:2px;}
+
+  .subgrid-title{font-size:11px;color:var(--ink-soft);margin:10px 0 6px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
+
+  .summary{font-family:var(--mono);font-size:12px;line-height:1.7;background:var(--ink);color:var(--white);padding:12px 14px;border-radius:var(--radius);margin-bottom:14px;}
+  .summary .n{color:#8fd0c8;}
+
+  .generate-btn{width:100%;padding:13px;background:var(--signal);color:var(--white);border:none;border-radius:var(--radius);font-family:var(--mono);font-weight:700;letter-spacing:1px;font-size:13px;cursor:pointer;text-transform:uppercase;}
+  .generate-btn:disabled{background:var(--line);color:var(--ink-soft);cursor:not-allowed;}
+  .generate-btn:not(:disabled):hover{background:#a3311f;}
+
+  .status{font-size:12px;margin-top:10px;line-height:1.5;}
+  .status.err{color:var(--signal);}
+  .status.ok{color:#1f6b4f;}
+
+  main.preview{min-height:400px;}
+  .empty-state{border:1.5px dashed var(--line);border-radius:var(--radius);padding:60px 20px;text-align:center;color:var(--ink-soft);font-size:13px;}
+  .empty-state .big{font-family:var(--mono);font-size:13px;letter-spacing:1px;color:var(--ink);margin-bottom:8px;text-transform:uppercase;}
+
+  .strip-wrap{margin-bottom:22px;}
+  .strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;}
+  .thumb{flex:none;width:64px;background:var(--white);border:1px solid var(--line);position:relative;}
+  .thumb img{width:100%;display:block;}
+  .thumb .num{position:absolute;bottom:2px;right:3px;font-family:var(--mono);font-size:9px;background:rgba(255,255,255,.85);padding:0 2px;color:var(--ink-soft);}
+
+  .sheets-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;}
+  .sheets-head h2{font-size:13px;font-family:var(--mono);letter-spacing:1px;text-transform:uppercase;margin:0;}
+  .sheets-head span{font-size:11.5px;color:var(--ink-soft);font-family:var(--mono);}
+  .sheets-head-right{display:flex;align-items:center;gap:14px;}
+  .zoom-controls{display:flex;align-items:center;border:1px solid var(--ink);border-radius:var(--radius);overflow:hidden;}
+  .zoom-controls button{
+    background:var(--white);border:none;border-right:1px solid var(--line);color:var(--ink);
+    font-family:var(--mono);font-size:12px;padding:4px 9px;cursor:pointer;line-height:1;
+  }
+  .zoom-controls button:last-child{border-right:none;}
+  .zoom-controls button:hover{background:var(--press-soft);}
+  .zoom-controls #zoomLabel{min-width:44px;color:var(--ink-soft);}
+
+  .sheets-grid{display:grid;grid-template-columns:repeat(2, max-content);gap:22px;justify-content:start;}
+  .sheet-outer{display:flex;flex-direction:column;align-items:flex-start;}
+  .sheet-label{font-family:var(--mono);font-size:10px;color:var(--ink-soft);margin-bottom:6px;display:flex;justify-content:space-between;width:100%;gap:10px;}
+  .sheet-frame{position:relative;background:var(--white);box-shadow:0 1px 2px rgba(0,0,0,.08);overflow:hidden;}
+  .marginbox{position:absolute;display:flex;align-items:center;justify-content:center;overflow:hidden;max-width:100%;max-height:100%;}
+  .cellgrid{display:grid;width:100%;height:100%;position:relative;min-width:0;min-height:0;}
+  .cell{border:1px dashed var(--line);position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;background:repeating-linear-gradient(45deg, var(--paper-alt) 0 6px, var(--white) 6px 12px);min-width:0;min-height:0;}
+  .cell img{max-width:100%;max-height:100%;object-fit:contain;box-shadow:0 0 0 1px var(--line-soft);}
+  .cell.blank::after{content:'blank';font-family:var(--mono);font-size:9px;color:var(--ink-soft);}
+  .regmark{position:absolute;width:1px;height:1px;}
+  .regmark .h,.regmark .v{position:absolute;background:var(--signal);}
+
+  footer{margin-top:40px;font-size:11.5px;color:var(--ink-soft);border-top:1px solid var(--line);padding-top:14px;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="wordmark"><span class="mark"></span>IMPOSE</div>
+    <div class="tagline">Arrange PDF pages into print-ready sheets — grids, step-and-repeat, and booklets, entirely in your browser.</div>
+  </header>
+
+  <div class="layout">
+    <div class="panel">
+
+      <div class="section-block">
+        <div class="section-label">Source file</div>
+        <div id="fileArea">
+          <div class="dropzone" id="dropzone">
+            <strong>Drop PDF(s) here</strong>
+            <p>or click to browse — multiple files will be combined in order</p>
+            <input type="file" id="fileInput" accept="application/pdf" multiple>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-block">
+        <div class="step-badge">Step 1</div>
+        <div class="section-label">Mode</div>
+        <div class="segmented" id="modeSeg">
+          <button data-mode="grid" class="active">Grid</button>
+          <button data-mode="booklet">Booklet</button>
+        </div>
+      </div>
+
+      <div class="section-block">
+        <div class="section-label">Paper size</div>
+        <div class="row2">
+          <div class="field">
+            <label for="paperSize">Preset</label>
+            <select id="paperSize">
+              <option value="A4">A4</option>
+              <option value="Letter" selected>Letter</option>
+              <option value="Legal">Legal</option>
+              <option value="A3">A3</option>
+              <option value="Tabloid">Tabloid</option>
+              <option value="SRA3">SRA3 (320×450mm)</option>
+              <option value="Custom">Custom</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="checkline" style="margin-top:22px;"><input type="checkbox" id="landscape"> Landscape</label>
+          </div>
+        </div>
+        <div class="row2" id="customSize" style="display:none;">
+          <div class="field">
+            <label for="customW">Width (mm)</label>
+            <div class="widthheight">
+              <input type="number" id="customW" value="215.9">
+              <button type="button" class="lockbtn" id="lockAspect" title="Lock aspect ratio">🔓</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="customH">Height (mm)</label>
+            <input type="number" id="customH" value="279.4">
+          </div>
+        </div>
+        <div class="field" style="margin-top:12px;">
+          <label for="rotatePage">Rotate pages</label>
+          <div class="row2">
+            <select id="rotatePage">
+              <option value="0">0°</option>
+              <option value="90">90° (counter-clockwise)</option>
+              <option value="180">180°</option>
+              <option value="270">270° (counter-clockwise)</option>
+            </select>
+            <select id="rotateApply">
+              <option value="all">All pages</option>
+              <option value="odd">Odd pages only</option>
+              <option value="even">Even pages only</option>
+              <option value="oddCcwEvenCw">Odd CCW · Even CW</option>
+              <option value="oddCwEvenCcw">Odd CW · Even CCW</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- GRID MODE CONTROLS -->
+      <div id="gridControls">
+        <div class="section-block">
+          <div class="section-label">Page order</div>
+          <div class="row2">
+            <div class="field">
+              <label for="repeatMode">Arrangement</label>
+              <select id="repeatMode">
+                <option value="repeat" selected>step and repeat</option>
+                <option value="sequential">sequential</option>
+                <option value="stack">stack</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>&nbsp;</label>
+              <label class="checkline" style="margin-top:6px;"><input type="checkbox" id="doubleSided"> Double sided</label>
+            </div>
+          </div>
+          <div class="field" id="repeatCountField" style="display:none;">
+            <label for="repeatCount">Repeat each page</label>
+            <input type="number" id="repeatCount" min="1" value="1">
+          </div>
+          <label class="checkline"><input type="checkbox" id="rtl"> Right-to-left reading order</label>
+        </div>
+
+        <div class="section-block">
+          <div class="section-label">Layout</div>
+          <label class="checkline"><input type="checkbox" id="autoscale"> Autoscale to fit cell</label>
+          <label class="checkline sub"><input type="checkbox" id="preserveAspect" checked> Preserve aspect ratio</label>
+          <div class="row2">
+            <div class="field"><label for="cols">Columns</label><input type="number" id="cols" min="1" max="10" value="2"></div>
+            <div class="field"><label for="rows">Rows</label><input type="number" id="rows" min="1" max="10" value="2"></div>
+          </div>
+          <div class="presets">
+            <button data-r="1" data-c="2">2-up</button>
+            <button data-r="2" data-c="2">4-up</button>
+            <button data-r="2" data-c="4">8-up</button>
+            <button data-r="4" data-c="4">16-up</button>
+          </div>
+          <div class="subgrid-title">Row reading order</div>
+          <div class="iconpick" id="rowOrderPick">
+            <button data-order="raster" class="active">
+              <svg width="46" height="30" viewBox="0 0 46 30"><rect x="2" y="2" width="12" height="10" fill="#b9d6c9"/><rect x="17" y="2" width="12" height="10" fill="#b9d6c9"/><rect x="32" y="2" width="12" height="10" fill="#b9d6c9"/><rect x="2" y="17" width="12" height="10" fill="#b9d6c9"/><rect x="17" y="17" width="12" height="10" fill="#b9d6c9"/><rect x="32" y="17" width="12" height="10" fill="#b9d6c9"/><path d="M6 7 H36 M32 4 L36 7 L32 10" stroke="#15181a" fill="none" stroke-width="1.3"/><path d="M36 12 V17" stroke="#15181a" stroke-width="1.3"/><path d="M6 22 H36" stroke="#15181a" fill="none" stroke-width="1.3"/><path d="M32 19 L36 22 L32 25" stroke="#15181a" fill="none" stroke-width="1.3"/></svg>
+              <span class="cap">Left–right</span>
+            </button>
+            <button data-order="boustrophedon">
+              <svg width="46" height="30" viewBox="0 0 46 30"><rect x="2" y="2" width="12" height="10" fill="#b9d6c9"/><rect x="17" y="2" width="12" height="10" fill="#b9d6c9"/><rect x="32" y="2" width="12" height="10" fill="#b9d6c9"/><rect x="2" y="17" width="12" height="10" fill="#b9d6c9"/><rect x="17" y="17" width="12" height="10" fill="#b9d6c9"/><rect x="32" y="17" width="12" height="10" fill="#b9d6c9"/><path d="M6 7 H36 M32 4 L36 7 L32 10" stroke="#15181a" fill="none" stroke-width="1.3"/><path d="M36 12 V17" stroke="#15181a" stroke-width="1.3"/><path d="M36 22 H6" stroke="#15181a" fill="none" stroke-width="1.3"/><path d="M10 19 L6 22 L10 25" stroke="#15181a" fill="none" stroke-width="1.3"/></svg>
+              <span class="cap">Zigzag</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- BOOKLET MODE CONTROLS -->
+      <div id="bookletControls" style="display:none;">
+        <div class="section-block">
+          <div class="section-label">Page order</div>
+          <div class="field">
+            <label for="duplexMode">Print order</label>
+            <select id="duplexMode">
+              <option value="auto">Auto-duplex printer (alternating)</option>
+              <option value="manual">Manual duplex (fronts, then backs)</option>
+            </select>
+          </div>
+          <label class="checkline"><input type="checkbox" id="rtlBooklet"> Right-to-left reading order</label>
+          <p style="font-size:11.5px;color:var(--ink-soft);margin:6px 0 0;">Saddle-stitch, 2 pages per side. Pages are padded to a multiple of 4.</p>
+        </div>
+        <div class="section-block">
+          <label class="checkline"><input type="checkbox" id="bookletWhiteSpace"> Add white space (margins &amp; spine gutter)</label>
+          <p style="font-size:11.5px;color:var(--ink-soft);margin:6px 0 0;">Off: each spread sits at its real size, centered on the Paper Size sheet — the TrimBox still records the spread's true size. On: the spread is fit into the paper using the White Space settings below.</p>
+        </div>
+      </div>
+
+      <div class="section-block" id="whiteSpaceSection">
+        <div class="section-label">White space</div>
+        <div class="subgrid-title">Margins (mm)</div>
+        <div class="row2">
+          <div class="field"><label for="marginL">Left</label><input type="number" id="marginL" value="8" min="0"></div>
+          <div class="field"><label for="marginT">Top</label><input type="number" id="marginT" value="8" min="0"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label for="marginR">Right</label><input type="number" id="marginR" value="8" min="0"></div>
+          <div class="field"><label for="marginB">Bottom</label><input type="number" id="marginB" value="8" min="0"></div>
+        </div>
+        <div class="subgrid-title">Gutters (mm)</div>
+        <div class="row2">
+          <div class="field"><label for="gutterH">Horizontal</label><input type="number" id="gutterH" value="4" min="0"></div>
+          <div class="field"><label for="gutterV">Vertical</label><input type="number" id="gutterV" value="4" min="0"></div>
+        </div>
+        <label class="checkline"><input type="checkbox" id="centerOnPage" checked> Center output on page</label>
+      </div>
+
+      <div class="section-block">
+        <div class="section-label">Printer's marks</div>
+        <label class="checkline"><input type="checkbox" id="cropMarks" checked> Draw crop marks</label>
+        <label class="checkline"><input type="checkbox" id="gutterMarks" checked> Draw marks in gutters</label>
+        <label class="checkline"><input type="checkbox" id="centerMarks"> Draw center marks</label>
+        <div class="row3">
+          <div class="field"><label for="markLength">Length</label><input type="number" id="markLength" value="5" min="0"></div>
+          <div class="field"><label for="markThickness">Thickness</label><input type="number" id="markThickness" value="0.25" min="0" step="0.05"></div>
+          <div class="field"><label for="markDistance">Distance</label><input type="number" id="markDistance" value="2" min="0"></div>
+        </div>
+        <label class="checkline"><input type="checkbox" id="registrationColor" checked> Registration Color</label>
+        <label class="checkline"><input type="checkbox" id="knockout"> Knockout</label>
+        <button type="button" class="add-step-btn" id="addStepAfter1">+ Add Step</button>
+      </div>
+
+      <div id="extraStepsContainer"></div>
+
+      <div class="section-block">
+        <div class="section-label">Overlay image</div>
+        <div class="dropzone" id="overlayDropzone" style="padding:16px;">
+          <strong>Choose overlay file</strong>
+          <p>PDF, PNG, or JPG — stamped onto the imposed sheets</p>
+          <input type="file" id="overlayInput" accept="application/pdf,image/png,image/jpeg">
+        </div>
+        <div id="overlayChip" class="file-chip" style="display:none;margin-top:8px;"></div>
+
+        <label class="checkline" style="margin-top:10px;"><input type="checkbox" id="overlayRepeat" checked> Repeat on every matching page</label>
+        <div class="row2">
+          <div class="field">
+            <label for="overlayBlend">Blend mode</label>
+            <select id="overlayBlend">
+              <option value="Normal">normal</option>
+              <option value="Multiply" selected>multiply</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="overlayOpacity">Opacity (%)</label>
+            <input type="number" id="overlayOpacity" min="0" max="100" value="100">
+          </div>
+        </div>
+        <div class="field">
+          <label for="overlayPages">Pages</label>
+          <input type="text" id="overlayPages" value="all" placeholder="all, or e.g. 1,3,5-8">
+        </div>
+        <div class="subgrid-title">Location</div>
+        <div class="anchor-grid" id="overlayAnchor" data-row="1" data-col="1"></div>
+        <div class="field" style="margin-top:10px;max-width:140px;">
+          <label for="overlayPadding">Padding (mm)</label>
+          <input type="number" id="overlayPadding" min="0" value="5">
+        </div>
+      </div>
+
+      <div class="section-block">
+        <div class="section-label">Add text</div>
+        <div class="field">
+          <label for="textContent">Text</label>
+          <input type="text" id="textContent" placeholder="e.g. CONFIDENTIAL">
+        </div>
+        <div class="row2">
+          <div class="field"><label for="textSize">Size (pt)</label><input type="number" id="textSize" value="24" min="1"></div>
+          <div class="field">
+            <label for="textColorMode">Color mode</label>
+            <select id="textColorMode">
+              <option value="rgb" selected>RGB</option>
+              <option value="cmyk">CMYK</option>
+            </select>
+          </div>
+        </div>
+        <div class="field" id="textColorRgbField">
+          <label for="textColor">Color</label>
+          <input type="color" id="textColor" value="#bf3b2a">
+        </div>
+        <div class="row4" id="textColorCmykField" style="display:none;">
+          <div class="field"><label for="textC">C</label><input type="number" id="textC" min="0" max="100" value="0"></div>
+          <div class="field"><label for="textM">M</label><input type="number" id="textM" min="0" max="100" value="70"></div>
+          <div class="field"><label for="textY">Y</label><input type="number" id="textY" min="0" max="100" value="65"></div>
+          <div class="field"><label for="textK">K</label><input type="number" id="textK" min="0" max="100" value="10"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label for="textOpacity">Opacity (%)</label><input type="number" id="textOpacity" min="0" max="100" value="60"></div>
+        </div>
+        <div class="field">
+          <label for="textPages">Pages</label>
+          <input type="text" id="textPages" value="all" placeholder="all, or e.g. 1,3,5-8">
+        </div>
+
+        <div class="row2" style="align-items:start;">
+          <div>
+            <div class="subgrid-title">Location</div>
+            <div class="anchor-grid" id="textAnchor" data-row="1" data-col="1"></div>
+          </div>
+          <div>
+            <div class="subgrid-title">Rotate</div>
+            <div class="rotate-picker" id="textRotatePicker" data-rotate="0">
+              <label class="rotate-option"><input type="radio" name="textRotateOpt" value="0" checked><span class="rtext r0">Text</span></label>
+              <label class="rotate-option"><input type="radio" name="textRotateOpt" value="90"><span class="rtext r90">Text</span></label>
+              <label class="rotate-option"><input type="radio" name="textRotateOpt" value="180"><span class="rtext r180">Text</span></label>
+              <label class="rotate-option"><input type="radio" name="textRotateOpt" value="270"><span class="rtext r270">Text</span></label>
+            </div>
+          </div>
+        </div>
+
+        <label class="checkline" style="margin-top:10px;"><input type="checkbox" id="textAlternateSides"> Alternate sides for odd and even pages</label>
+
+        <div class="subgrid-title" style="margin-top:12px;">Margins (mm)</div>
+        <div class="row2">
+          <div class="field"><label for="textMarginLeft">Left</label><input type="number" id="textMarginLeft" min="0" value="5"></div>
+          <div class="field"><label for="textMarginTop">Top</label><input type="number" id="textMarginTop" min="0" value="5"></div>
+        </div>
+      </div>
+
+      <div id="summary" class="summary" style="display:none;"></div>
+      <button class="generate-btn" id="generateBtn" disabled>Load a PDF first</button>
+      <div id="status" class="status"></div>
+    </div>
+
+    <main class="preview">
+      <div id="emptyState" class="empty-state">
+        <div class="big">No document loaded</div>
+        Drop a PDF into the panel on the left to preview its imposition.
+      </div>
+      <div id="previewContent" style="display:none;">
+        <div class="strip-wrap">
+          <div class="sheets-head"><h2>Source pages</h2><span id="pageCountLabel"></span></div>
+          <div class="strip" id="strip"></div>
+        </div>
+        <div class="sheets-head">
+          <h2 id="sheetsHeading">Imposed sheets</h2>
+          <div class="sheets-head-right">
+            <span id="sheetCountLabel"></span>
+            <div class="zoom-controls">
+              <button type="button" id="zoomOut" title="Zoom out">&minus;</button>
+              <button type="button" id="zoomLabel" title="Reset zoom">100%</button>
+              <button type="button" id="zoomIn" title="Zoom in">&plus;</button>
+            </div>
+          </div>
+        </div>
+        <div class="sheets-grid" id="sheetsGrid"></div>
+      </div>
+    </main>
+  </div>
+
+  <footer>Runs entirely client-side — your file never leaves the browser. Best suited to documents up to a couple hundred pages.</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js";
+
+const PAPER_PT = { A4:[595.28,841.89], Letter:[612,792], Legal:[612,1008], A3:[841.89,1190.55], Tabloid:[792,1224], SRA3:[907.09,1275.59] };
+const mm2pt = mm => mm * 2.83464567;
+const pt2mm = pt => pt / 2.83464567;
+const $ = id => document.getElementById(id);
+
+let state = { docs: [], activeDoc: 0 };
+function currentDoc(){ return state.docs[state.activeDoc] || null; }
+
+// Resolve a page's box hierarchy. TrimBox drives sizing/marks; BleedBox (falling
+// back to TrimBox when absent, i.e. zero bleed) drives what artwork actually gets embedded.
+function tryGetBox(p, fn){
+  try{
+    if (typeof p[fn] === 'function'){
+      const b = p[fn]();
+      if (b && b.width>0 && b.height>0) return b;
+    }
+  }catch(e){}
+  return null;
+}
+function getBoxes(p){
+  const mediaBox = tryGetBox(p,'getMediaBox') || {x:0,y:0,width:p.getWidth(),height:p.getHeight()};
+  const cropBox = tryGetBox(p,'getCropBox') || mediaBox;
+  const trimBox = tryGetBox(p,'getTrimBox') || cropBox;
+  const bleedBox = tryGetBox(p,'getBleedBox') || trimBox;
+  const bleed = {
+    left: Math.max(0, trimBox.x - bleedBox.x),
+    bottom: Math.max(0, trimBox.y - bleedBox.y),
+    right: Math.max(0, (bleedBox.x+bleedBox.width) - (trimBox.x+trimBox.width)),
+    top: Math.max(0, (bleedBox.y+bleedBox.height) - (trimBox.y+trimBox.height)),
+  };
+  return {mediaBox, cropBox, trimBox, bleedBox, bleed};
+}
+
+// Remap a {left,bottom,right,top} bleed object to what it becomes after a CCW
+// rotation of `rot` degrees (0/90/180/270). e.g. rotating 90° CCW, the source
+// page's top edge ends up facing left in output space.
+function rotateBleed(b, rot){
+  const r = ((rot%360)+360)%360;
+  if (r===90)  return {left:b.top,    top:b.right,  right:b.bottom, bottom:b.left};
+  if (r===180) return {left:b.right,  top:b.bottom, right:b.left,   bottom:b.top};
+  if (r===270) return {left:b.bottom, top:b.left,   right:b.top,    bottom:b.right};
+  return {left:b.left, top:b.top, right:b.right, bottom:b.bottom};
+}
+function effectiveRotation(idx, baseRot){
+  const applyTo = $('rotateApply').value;
+  const pageNum = idx+1;
+  const isOdd = pageNum%2===1;
+  const opposite = (360-baseRot)%360; // same magnitude, other direction
+  switch(applyTo){
+    case 'odd':          return isOdd ? baseRot : 0;
+    case 'even':         return isOdd ? 0 : baseRot;
+    case 'oddCcwEvenCw': return isOdd ? baseRot : opposite;
+    case 'oddCwEvenCcw': return isOdd ? opposite : baseRot;
+    default:             return baseRot; // 'all'
+  }
+}
+
+// Rotate each page's own trim dimensions upfront (swap w/h for 90/270), so
+// cell sizing, natural-size mode, and TrimBox math all operate on the correct
+// post-rotation footprint instead of only the draw step accounting for it.
+function getEffectivePageDims(doc){
+  const baseRot = parseInt($('rotatePage').value) || 0;
+  return doc.pageDims.map((d, idx) => {
+    const rot = effectiveRotation(idx, baseRot);
+    return (rot===90 || rot===270) ? {w:d.h, h:d.w} : {w:d.w, h:d.h};
+  });
+}
+let mode = 'grid';
+let extraStepsByMode = { grid: [], booklet: [] }; // separate chains depending on Step 1's mode
+let extraSteps = extraStepsByMode.grid; // [{type:'grid',cols,rows,arrangement,rowOrder,repeatCount,doubleSided,rtl} | {type:'booklet',duplexMode,rtl}]
+let previewZoom = 1;
+let rowOrder = 'raster';
+let aspectLocked = false;
+let customRatio = 215.9/279.4;
+
+// ---- file handling ----
+const dropzone = $('dropzone'), fileInput = $('fileInput');
+['dragenter','dragover'].forEach(evt=> dropzone.addEventListener(evt, e=>{e.preventDefault(); dropzone.classList.add('drag');}));
+['dragleave','drop'].forEach(evt=> dropzone.addEventListener(evt, e=>{e.preventDefault(); dropzone.classList.remove('drag');}));
+dropzone.addEventListener('drop', e=>{ if(e.dataTransfer.files.length) handleFiles(e.dataTransfer.files); });
+dropzone.addEventListener('click', ()=> fileInput.click());
+fileInput.addEventListener('change', e=>{ if(e.target.files.length) handleFiles(e.target.files); });
+
+async function handleFiles(fileList){
+  const files = Array.from(fileList).filter(f => f.type==='application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+  if (!files.length){ setStatus('Please choose PDF file(s).', true); return; }
+  setStatus(files.length>1 ? `Loading ${files.length} files…` : 'Loading document…');
+  try{
+    const docs = [];
+    for (const file of files){
+      const buf = await file.arrayBuffer();
+      const baseName = file.name.replace(/\.pdf$/i,'');
+
+      const pdfLibDoc = await PDFLib.PDFDocument.load(buf.slice(0));
+      const numPages = pdfLibDoc.getPageCount();
+      const pageDims = pdfLibDoc.getPages().map(p=>{ const b=getBoxes(p).trimBox; return {w:b.width, h:b.height}; });
+
+      const pdfjsDoc = await pdfjsLib.getDocument({data: buf.slice(0)}).promise;
+      const thumbs = [];
+      const maxThumbs = Math.min(numPages, 300);
+      for(let i=1;i<=maxThumbs;i++){
+        const page = await pdfjsDoc.getPage(i);
+        const vp = page.getViewport({scale:1});
+        const scale = 90/vp.width;
+        const scaledVp = page.getViewport({scale});
+        const canvas = document.createElement('canvas');
+        canvas.width = scaledVp.width; canvas.height = scaledVp.height;
+        await page.render({canvasContext: canvas.getContext('2d'), viewport: scaledVp}).promise;
+        thumbs.push(canvas.toDataURL('image/png'));
+      }
+
+      docs.push({ fileName: file.name, baseName, bytes: buf, numPages, pageDims, thumbs });
+    }
+
+    state.docs = docs;
+    state.activeDoc = 0;
+
+    $('fileArea').innerHTML = `
+      <details class="file-dropdown" id="fileDropdown" open>
+        <summary id="fileDropdownSummary"></summary>
+        <div class="file-list" id="fileList"></div>
+        <button class="clear-all" id="clearAllFiles" style="display:none;margin-top:6px;">remove all</button>
+      </details>`;
+    $('clearAllFiles').addEventListener('click', (e)=>{ e.stopPropagation(); location.reload(); });
+    renderFileList();
+    $('emptyState').style.display='none';
+    $('previewContent').style.display='block';
+    $('generateBtn').disabled = false;
+    $('generateBtn').textContent = docs.length>1 ? `Generate ${docs.length} imposed PDFs` : 'Generate imposed PDF';
+    setStatus('');
+    renderActiveDocPreview();
+    update();
+  } catch(err){ console.error(err); setStatus('Could not read that PDF: ' + err.message, true); }
+}
+
+function updateFileSummary(){
+  const doc = currentDoc();
+  const summary = $('fileDropdownSummary');
+  if (!summary) return;
+  summary.textContent = state.docs.length>1
+    ? `${doc ? doc.fileName : ''} · ${state.docs.length} files loaded`
+    : (doc ? `${doc.fileName} · ${doc.numPages} pages` : 'No file loaded');
+}
+
+function removeDoc(i){
+  state.docs.splice(i,1);
+  if (!state.docs.length){ location.reload(); return; }
+  if (state.activeDoc === i) state.activeDoc = Math.min(i, state.docs.length-1);
+  else if (state.activeDoc > i) state.activeDoc -= 1;
+  renderFileList();
+  renderActiveDocPreview();
+  update();
+  $('generateBtn').textContent = state.docs.length>1 ? `Generate ${state.docs.length} imposed PDFs` : 'Generate imposed PDF';
+}
+
+function renderFileList(){
+  $('fileList').innerHTML = state.docs.map((d,i)=>`
+    <div class="file-chip${i===state.activeDoc?' active':''}" data-idx="${i}">
+      <span class="name">${escapeHtml(d.fileName)} · ${d.numPages} pages</span>
+      <button class="x-remove" data-remove="${i}" title="Remove this file">&times;</button>
+    </div>`).join('');
+  $('fileList').querySelectorAll('.file-chip').forEach(el=>{
+    el.addEventListener('click', ()=>{ state.activeDoc = parseInt(el.dataset.idx); renderFileList(); renderActiveDocPreview(); update(); });
+  });
+  $('fileList').querySelectorAll('[data-remove]').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{ e.stopPropagation(); removeDoc(parseInt(btn.dataset.remove)); });
+  });
+  $('clearAllFiles').style.display = state.docs.length>1 ? 'inline' : 'none';
+  updateFileSummary();
+}
+
+function renderActiveDocPreview(){
+  const doc = currentDoc();
+  if (!doc) return;
+  $('pageCountLabel').textContent = doc.numPages + ' pages' + (doc.numPages>2 ? ' (showing first 2)' : '') + (state.docs.length>1 ? ` (previewing: ${escapeHtml(doc.fileName)})` : '');
+  $('strip').innerHTML = doc.thumbs.slice(0,2).map((src,i)=>`<div class="thumb"><img src="${src}"><span class="num">${i+1}</span></div>`).join('');
+}
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function setStatus(msg, isErr){ const el=$('status'); el.textContent=msg; el.className='status'+(isErr?' err':(msg?' ok':'')); }
+
+// ---- mode switching ----
+document.querySelectorAll('#modeSeg button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('#modeSeg button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    mode = btn.dataset.mode;
+    $('gridControls').style.display = mode==='grid' ? 'block':'none';
+    $('bookletControls').style.display = mode==='booklet' ? 'block':'none';
+    updateWhiteSpaceVisibility();
+    extraSteps = extraStepsByMode[mode];
+    renderExtraSteps();
+    if (mode==='booklet'){ $('cols').value=2; $('rows').value=1; $('landscape').checked=true; }
+    update();
+  });
+});
+
+// ---- extra step chain (Step 2, Step 3, ...) ----
+function defaultGridStep(){
+  return {type:'grid', cols:2, rows:1, arrangement:'sequential', rowOrder:'raster', repeatCount:1, doubleSided:false, rtl:false,
+    autoscale:false, preserveAspect:true,
+    paperSize:'Letter', customW:210, customH:297, landscape:false,
+    marginL:8, marginT:8, marginR:8, marginB:8, gutterH:4, gutterV:4, rotate:0};
+}
+function defaultBookletStep(){
+  return {type:'booklet', duplexMode:'auto', rtl:false,
+    paperSize:'Letter', customW:210, customH:297, landscape:true,
+    marginL:8, marginT:8, marginR:8, marginB:8, gutterH:4, gutterV:4, rotate:0};
+}
+
+function renderExtraSteps(){
+  const container = $('extraStepsContainer');
+  container.innerHTML = extraSteps.map((step, i) => `
+    <div class="step-card" data-idx="${i}">
+      <div class="step-card-head">
+        <span class="step-badge">Step ${i+2}</span>
+        <button class="x-remove" data-remove-step="${i}" title="Remove this step">&times;</button>
+      </div>
+      <div class="step-type-seg" data-idx="${i}">
+        <button data-type="grid" class="${step.type==='grid'?'active':''}">Grid</button>
+        <button data-type="booklet" class="${step.type==='booklet'?'active':''}">Booklet</button>
+      </div>
+
+      <div class="subgrid-title">Sheet size</div>
+      <div class="row2">
+        <div class="field">
+          <label>Preset</label>
+          <select data-field="paperSize" data-idx="${i}">
+            ${['A4','Letter','Legal','A3','Tabloid','SRA3','Custom'].map(p=>`<option value="${p}" ${step.paperSize===p?'selected':''}>${p==='SRA3'?'SRA3 (320×450mm)':p}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label style="visibility:hidden;">Landscape</label><label class="checkline" style="margin-top:6px;"><input type="checkbox" data-field="landscape" data-idx="${i}" ${step.landscape?'checked':''}> Landscape</label></div>
+      </div>
+      ${step.paperSize==='Custom' ? `
+      <div class="row2">
+        <div class="field"><label>Width (mm)</label><input type="number" data-field="customW" data-numtype="float" data-idx="${i}" value="${step.customW}"></div>
+        <div class="field"><label>Height (mm)</label><input type="number" data-field="customH" data-numtype="float" data-idx="${i}" value="${step.customH}"></div>
+      </div>` : ''}
+
+      <div class="subgrid-title">Rotate pages</div>
+      <select data-field="rotate" data-idx="${i}">
+        <option value="0" ${(''+step.rotate)==='0'?'selected':''}>0°</option>
+        <option value="90" ${(''+step.rotate)==='90'?'selected':''}>90° (counter-clockwise)</option>
+        <option value="180" ${(''+step.rotate)==='180'?'selected':''}>180°</option>
+        <option value="270" ${(''+step.rotate)==='270'?'selected':''}>270° (counter-clockwise)</option>
+      </select>
+
+      <div class="subgrid-title">Page order</div>
+      ${step.type==='grid' ? `
+        <div class="field">
+          <label>Arrangement</label>
+          <select data-field="arrangement" data-idx="${i}">
+            <option value="repeat" ${step.arrangement==='repeat'?'selected':''}>step and repeat</option>
+            <option value="sequential" ${step.arrangement==='sequential'?'selected':''}>sequential</option>
+            <option value="stack" ${step.arrangement==='stack'?'selected':''}>stack</option>
+          </select>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Columns</label><input type="number" min="1" value="${step.cols}" data-field="cols" data-idx="${i}"></div>
+          <div class="field"><label>Rows</label><input type="number" min="1" value="${step.rows}" data-field="rows" data-idx="${i}"></div>
+        </div>
+        <label class="checkline"><input type="checkbox" data-field="autoscale" data-idx="${i}" ${step.autoscale?'checked':''}> Autoscale to fit cell</label>
+        <label class="checkline"><input type="checkbox" data-field="preserveAspect" data-idx="${i}" ${step.preserveAspect?'checked':''}> Preserve aspect ratio</label>
+        ${(step.arrangement==='sequential'||step.arrangement==='stack') ? `
+        <div class="row2">
+          <div class="field"><label>Row order</label>
+            <select data-field="rowOrder" data-idx="${i}">
+              <option value="raster" ${step.rowOrder==='raster'?'selected':''}>Left–right</option>
+              <option value="boustrophedon" ${step.rowOrder==='boustrophedon'?'selected':''}>Zigzag</option>
+            </select>
+          </div>
+          <div class="field"><label>Repeat each page</label><input type="number" min="1" value="${step.repeatCount}" data-field="repeatCount" data-idx="${i}"></div>
+        </div>` : ''}
+        <label class="checkline"><input type="checkbox" data-field="doubleSided" data-idx="${i}" ${step.doubleSided?'checked':''}> Double sided</label>
+        <label class="checkline"><input type="checkbox" data-field="rtl" data-idx="${i}" ${step.rtl?'checked':''}> Right-to-left reading order</label>
+      ` : `
+        <div class="field">
+          <label>Print order</label>
+          <select data-field="duplexMode" data-idx="${i}">
+            <option value="auto" ${step.duplexMode==='auto'?'selected':''}>Auto-duplex printer (alternating)</option>
+            <option value="manual" ${step.duplexMode==='manual'?'selected':''}>Manual duplex (fronts, then backs)</option>
+          </select>
+        </div>
+        <label class="checkline"><input type="checkbox" data-field="rtl" data-idx="${i}" ${step.rtl?'checked':''}> Right-to-left reading order</label>
+        <p style="font-size:11.5px;color:var(--ink-soft);margin:6px 0 0;">Saddle-stitch, 2 pages per side, padded to a multiple of 4.</p>
+      `}
+
+      <div class="subgrid-title">White space (mm)</div>
+      <div class="row2">
+        <div class="field"><label>Left</label><input type="number" data-field="marginL" data-numtype="float" data-idx="${i}" value="${step.marginL}"></div>
+        <div class="field"><label>Top</label><input type="number" data-field="marginT" data-numtype="float" data-idx="${i}" value="${step.marginT}"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Right</label><input type="number" data-field="marginR" data-numtype="float" data-idx="${i}" value="${step.marginR}"></div>
+        <div class="field"><label>Bottom</label><input type="number" data-field="marginB" data-numtype="float" data-idx="${i}" value="${step.marginB}"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Gutter H</label><input type="number" data-field="gutterH" data-numtype="float" data-idx="${i}" value="${step.gutterH}"></div>
+        <div class="field"><label>Gutter V</label><input type="number" data-field="gutterV" data-numtype="float" data-idx="${i}" value="${step.gutterV}"></div>
+      </div>
+
+      <button type="button" class="add-step-btn" data-add-after="${i}">+ Add Step</button>
+    </div>
+  `).join('');
+
+  container.querySelectorAll('[data-remove-step]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ extraSteps.splice(parseInt(btn.dataset.removeStep),1); renderExtraSteps(); update(); });
+  });
+  container.querySelectorAll('.step-type-seg').forEach(seg=>{
+    seg.querySelectorAll('button').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const i = parseInt(seg.dataset.idx);
+        extraSteps[i] = b.dataset.type==='grid' ? defaultGridStep() : defaultBookletStep();
+        renderExtraSteps();
+        update();
+      });
+    });
+  });
+  container.querySelectorAll('[data-field]').forEach(inp=>{
+    const evt = inp.tagName==='SELECT' ? 'change' : 'input';
+    inp.addEventListener(evt, ()=>{
+      const i = parseInt(inp.dataset.idx);
+      const field = inp.dataset.field;
+      if (inp.type==='checkbox') extraSteps[i][field] = inp.checked;
+      else if (inp.type==='number'){
+        if (inp.dataset.numtype==='float'){ const v=parseFloat(inp.value); extraSteps[i][field] = isNaN(v)?0:v; }
+        else { extraSteps[i][field] = Math.max(1, parseInt(inp.value)||1); }
+      }
+      else extraSteps[i][field] = inp.value;
+      if (field==='arrangement' || field==='paperSize') renderExtraSteps();
+      update();
+    });
+  });
+  container.querySelectorAll('[data-add-after]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const i = parseInt(btn.dataset.addAfter);
+      extraSteps.splice(i+1, 0, defaultGridStep());
+      renderExtraSteps();
+      update();
+    });
+  });
+}
+$('addStepAfter1').addEventListener('click', ()=>{
+  extraSteps.push(defaultGridStep());
+  renderExtraSteps();
+  update();
+});
+
+function setZoom(z){
+  previewZoom = Math.max(0.4, Math.min(3, z));
+  $('zoomLabel').textContent = Math.round(previewZoom*100) + '%';
+  update();
+}
+$('zoomIn').addEventListener('click', ()=> setZoom(previewZoom + 0.2));
+$('zoomOut').addEventListener('click', ()=> setZoom(previewZoom - 0.2));
+$('zoomLabel').addEventListener('click', ()=> setZoom(1));
+
+document.querySelectorAll('.presets button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{ $('rows').value=btn.dataset.r; $('cols').value=btn.dataset.c; update(); });
+});
+
+document.querySelectorAll('#rowOrderPick button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('#rowOrderPick button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active'); rowOrder = btn.dataset.order; update();
+  });
+});
+
+$('paperSize').addEventListener('change', ()=>{ $('customSize').style.display = $('paperSize').value==='Custom' ? 'grid':'none'; update(); });
+$('lockAspect').addEventListener('click', ()=>{
+  aspectLocked = !aspectLocked;
+  $('lockAspect').classList.toggle('active', aspectLocked);
+  $('lockAspect').textContent = aspectLocked ? '🔒' : '🔓';
+  customRatio = (parseFloat($('customW').value)||1) / (parseFloat($('customH').value)||1);
+});
+$('customW').addEventListener('input', ()=>{ if(aspectLocked){ $('customH').value = (parseFloat($('customW').value)/customRatio).toFixed(1); } update(); });
+$('customH').addEventListener('input', ()=>{ if(aspectLocked){ $('customW').value = (parseFloat($('customH').value)*customRatio).toFixed(1); } update(); });
+
+$('autoscale').addEventListener('change', ()=>{ $('preserveAspect').disabled = !$('autoscale').checked; update(); });
+$('preserveAspect').disabled = !$('autoscale').checked;
+
+function updateRepeatCountVisibility(){
+  const arrangement = $('repeatMode').value;
+  $('repeatCountField').style.display = (arrangement==='sequential' || arrangement==='stack') ? 'block' : 'none';
+}
+$('repeatMode').addEventListener('change', updateRepeatCountVisibility);
+updateRepeatCountVisibility();
+
+function updateWhiteSpaceVisibility(){
+  const show = mode!=='booklet' || $('bookletWhiteSpace').checked;
+  $('whiteSpaceSection').style.display = show ? 'block' : 'none';
+}
+$('bookletWhiteSpace').addEventListener('change', ()=>{ updateWhiteSpaceVisibility(); update(); });
+updateWhiteSpaceVisibility();
+
+// ---- 9-point anchor grid (used for both overlay image and text position) ----
+function anchorGridHtml(defaultRow, defaultCol){
+  let html='';
+  for(let r=0;r<3;r++) for(let c=0;c<3;c++){
+    const active = (r===defaultRow && c===defaultCol) ? ' active' : '';
+    html += `<div class="anchor-cell${active}" data-row="${r}" data-col="${c}"><span class="dot"></span></div>`;
+  }
+  return html;
+}
+function setupAnchorGrid(containerId){
+  const el = $(containerId);
+  el.innerHTML = anchorGridHtml(parseInt(el.dataset.row), parseInt(el.dataset.col));
+  el.querySelectorAll('.anchor-cell').forEach(cell=>{
+    cell.addEventListener('click', ()=>{
+      el.querySelectorAll('.anchor-cell').forEach(c=>c.classList.remove('active'));
+      cell.classList.add('active');
+      el.dataset.row = cell.dataset.row;
+      el.dataset.col = cell.dataset.col;
+    });
+  });
+}
+setupAnchorGrid('overlayAnchor');
+setupAnchorGrid('textAnchor');
+
+$('textRotatePicker').querySelectorAll('input[name="textRotateOpt"]').forEach(radio=>{
+  radio.addEventListener('change', ()=>{ $('textRotatePicker').dataset.rotate = radio.value; });
+});
+
+function updateTextColorModeVisibility(){
+  const isCmyk = $('textColorMode').value === 'cmyk';
+  $('textColorRgbField').style.display = isCmyk ? 'none' : 'block';
+  $('textColorCmykField').style.display = isCmyk ? 'grid' : 'none';
+}
+$('textColorMode').addEventListener('change', updateTextColorModeVisibility);
+updateTextColorModeVisibility();
+
+// ---- overlay image file ----
+let overlayState = null; // {bytes, kind:'pdf'|'png'|'jpg', name}
+$('overlayDropzone').addEventListener('click', ()=> $('overlayInput').click());
+$('overlayInput').addEventListener('change', async (e)=>{
+  const f = e.target.files[0];
+  if (!f) return;
+  const buf = await f.arrayBuffer();
+  const lower = f.name.toLowerCase();
+  const isPdf = f.type==='application/pdf' || lower.endsWith('.pdf');
+  const isPng = f.type==='image/png' || lower.endsWith('.png');
+  const kind = isPdf ? 'pdf' : (isPng ? 'png' : 'jpg');
+  overlayState = { bytes: buf, kind, name: f.name };
+
+  const chip = $('overlayChip');
+  chip.style.display = 'flex';
+  let preview;
+  if (kind === 'pdf'){
+    preview = `<span style="display:inline-flex;align-items:center;justify-content:center;height:28px;width:22px;border:1px solid var(--line);font-family:var(--mono);font-size:9px;color:var(--ink-soft);">PDF</span>`;
+  } else {
+    const blobUrl = URL.createObjectURL(new Blob([buf], {type: isPng?'image/png':'image/jpeg'}));
+    preview = `<img src="${blobUrl}" style="height:28px;width:auto;border:1px solid var(--line);">`;
+  }
+  chip.innerHTML = `<span class="name" style="display:flex;align-items:center;gap:8px;">${preview}${escapeHtml(f.name)}</span><button class="x-remove" id="overlayRemove">&times;</button>`;
+  $('overlayRemove').addEventListener('click', (ev)=>{ ev.stopPropagation(); overlayState=null; chip.style.display='none'; chip.innerHTML=''; });
+});
+
+// "all" or "1,3,5-8" -> Set of page numbers, or null meaning "all pages"
+function parsePagesSpec(spec){
+  if (!spec || spec.trim().toLowerCase()==='all') return null;
+  const set = new Set();
+  spec.split(',').forEach(part=>{
+    part = part.trim();
+    if (!part) return;
+    const m = part.match(/^(\d+)\s*-\s*(\d+)$/);
+    if (m){ for(let i=+m[1]; i<=+m[2]; i++) set.add(i); }
+    else { const n=parseInt(part); if (!isNaN(n)) set.add(n); }
+  });
+  return set;
+}
+function pageMatches(spec, pageNum){ return spec===null || spec.has(pageNum); }
+
+function hexToRgb01(hex){
+  const m = hex.replace('#','');
+  return PDFLib.rgb(parseInt(m.substring(0,2),16)/255, parseInt(m.substring(2,4),16)/255, parseInt(m.substring(4,6),16)/255);
+}
+
+// x,y (bottom-left) for an objW x objH box anchored to a 3x3 grid position on a pageW x pageH page.
+// paddingX/paddingY may be passed as a single shared value or separately.
+function anchorPosition(row, col, objW, objH, pageW, pageH, paddingX, paddingY){
+  if (paddingY === undefined) paddingY = paddingX;
+  let x, y;
+  if (col===0) x = paddingX;
+  else if (col===1) x = (pageW-objW)/2;
+  else x = pageW - paddingX - objW;
+  if (row===0) y = pageH - paddingY - objH; // top
+  else if (row===1) y = (pageH-objH)/2;
+  else y = paddingY; // bottom
+  return {x,y};
+}
+
+function ensureExtGState(page, opts){
+  // opts: {ca, BM}. Returns a resource name usable with the `gs` operator, or null on failure.
+  try{
+    const ctx = page.doc.context;
+    const dict = ctx.obj({ Type: PDFLib.PDFName.of('ExtGState'), ca: opts.ca, CA: opts.ca, BM: PDFLib.PDFName.of(opts.BM) });
+    const ref = ctx.register(dict);
+    let resources = page.node.Resources ? page.node.Resources() : undefined;
+    if (!resources){ resources = ctx.obj({}); page.node.set(PDFLib.PDFName.of('Resources'), resources); }
+    let gsDict = resources.get(PDFLib.PDFName.of('ExtGState'));
+    if (gsDict && gsDict instanceof PDFLib.PDFRef) gsDict = ctx.lookup(gsDict);
+    if (!gsDict){ gsDict = ctx.obj({}); resources.set(PDFLib.PDFName.of('ExtGState'), gsDict); }
+    const name = 'GS' + Math.random().toString(36).slice(2,8);
+    gsDict.set(PDFLib.PDFName.of(name), ref);
+    return name;
+  } catch(e){ return null; }
+}
+
+
+[ 'rows','cols','landscape','margin','marginL','marginT','marginR','marginB','gutterH','gutterV',
+  'rtl','rtlBooklet','cropMarks','gutterMarks','centerMarks','markLength','markThickness','markDistance',
+  'registrationColor','knockout','duplexMode','repeatMode','doubleSided','preserveAspect','centerOnPage','rotatePage','rotateApply','repeatCount'
+].forEach(id=>{ const el=$(id); if(el) el.addEventListener('input', update); });
+
+function getPaperDims(){
+  let w,h;
+  if ($('paperSize').value === 'Custom'){ w = mm2pt(parseFloat($('customW').value)||210); h = mm2pt(parseFloat($('customH').value)||297); }
+  else { [w,h] = PAPER_PT[$('paperSize').value]; }
+  const landscape = $('landscape').checked;
+  if (landscape){ [w,h] = [Math.max(w,h), Math.min(w,h)]; } else { [w,h] = [Math.min(w,h), Math.max(w,h)]; }
+  return {w,h};
+}
+
+// Sheet size for the current mode/document. Booklet with white space ON
+// auto-fits the sheet tightly to the spread's trim block plus margins/spine
+// gutter (its own real "cropbox"), instead of using the Paper Size preset.
+function getSheetDims(doc){
+  if (mode==='booklet' && $('bookletWhiteSpace').checked){
+    let cw=0, ch=0;
+    (doc ? getEffectivePageDims(doc) : []).forEach(d=>{ cw=Math.max(cw,d.w); ch=Math.max(ch,d.h); });
+    const gutterHpt = mm2pt(parseFloat($('gutterH').value)||0);
+    const marginLpt = mm2pt(parseFloat($('marginL').value)||0), marginRpt = mm2pt(parseFloat($('marginR').value)||0);
+    const marginTpt = mm2pt(parseFloat($('marginT').value)||0), marginBpt = mm2pt(parseFloat($('marginB').value)||0);
+    return { w: cw*2 + gutterHpt + marginLpt + marginRpt, h: ch + marginTpt + marginBpt };
+  }
+  return getPaperDims();
+}
+
+// Step 2: take the pages already produced by Step 1 (a Grid sheet or a
+// Booklet spread — each already carries its correct TrimBox) and tile them
+// onto a bigger outer sheet using the Paper Size + White Space settings.
+// Step 2+: take the pages already produced by the previous step (each
+// already carries its correct TrimBox) and impose them again — either
+// tiled on a grid, or paired 2-up saddle-stitch style — onto a new outer
+// sheet using the Paper Size + White Space + Printer's Marks settings.
+function getStepPaperDims(stepDef){
+  let w,h;
+  if (stepDef.paperSize === 'Custom'){ w = mm2pt(stepDef.customW||210); h = mm2pt(stepDef.customH||297); }
+  else { [w,h] = PAPER_PT[stepDef.paperSize || 'Letter']; }
+  if (stepDef.landscape){ [w,h] = [Math.max(w,h), Math.min(w,h)]; } else { [w,h] = [Math.min(w,h), Math.max(w,h)]; }
+  return {w,h};
+}
+
+// Embeds one source page into one cell, carrying bleed forward correctly:
+// uses the page's BleedBox (not just TrimBox) so any bleed drawn by a
+// previous chained step isn't lost, capping it to half the gutter on
+// internal edges and letting outer edges keep the full available bleed —
+// same rule as Step 1, just reusable for any step in the chain.
+async function embedIntoCell(outDoc, page, srcPage, cellX, cellY, cellW, cellH, edges, gutterH, gutterV, rot, autoscale, preserveAspect){
+  const boxes = getBoxes(srcPage);
+  const trimBox = boxes.trimBox;
+  const outputBleedFull = rotateBleed(boxes.bleed, rot);
+  const swapped = (rot===90 || rot===270);
+  const effTrimW = swapped ? trimBox.height : trimBox.width;
+  const effTrimH = swapped ? trimBox.width : trimBox.height;
+  let scaleX, scaleY;
+  if (!autoscale){
+    scaleX = scaleY = 1;
+  } else if (preserveAspect){
+    scaleX = scaleY = Math.min(cellW/effTrimW, cellH/effTrimH);
+  } else {
+    scaleX = cellW/effTrimW; scaleY = cellH/effTrimH;
+  }
+
+  const halfGutterH = (gutterH/2)/scaleX;
+  const halfGutterV = (gutterV/2)/scaleY;
+  const outAllow = {
+    left:   edges.left   ? outputBleedFull.left   : Math.min(outputBleedFull.left,   halfGutterH),
+    right:  edges.right  ? outputBleedFull.right  : Math.min(outputBleedFull.right,  halfGutterH),
+    top:    edges.top    ? outputBleedFull.top    : Math.min(outputBleedFull.top,    halfGutterV),
+    bottom: edges.bottom ? outputBleedFull.bottom : Math.min(outputBleedFull.bottom, halfGutterV),
+  };
+  const srcAllow = rotateBleed(outAllow, (360-rot)%360);
+
+  const emb = await outDoc.embedPage(srcPage, {
+    left: trimBox.x - srcAllow.left, bottom: trimBox.y - srcAllow.bottom,
+    right: trimBox.x+trimBox.width+srcAllow.right, top: trimBox.y+trimBox.height+srcAllow.top
+  });
+
+  const trimDrawW = effTrimW*scaleX, trimDrawH = effTrimH*scaleY;
+  const trimOriginX = cellX + (cellW-trimDrawW)/2;
+  const trimOriginY = cellY + (cellH-trimDrawH)/2;
+  const localScaleX = swapped ? scaleY : scaleX;
+  const localScaleY = swapped ? scaleX : scaleY;
+  const trimLocalX0 = srcAllow.left*localScaleX;
+  const trimLocalY0 = srcAllow.bottom*localScaleY;
+  const dw = emb.width*localScaleX, dh = emb.height*localScaleY;
+
+  let dx, dy;
+  if (rot===0){ dx=trimOriginX-trimLocalX0; dy=trimOriginY-trimLocalY0; }
+  else if (rot===90){ dx=trimOriginX+trimDrawW+trimLocalY0; dy=trimOriginY-trimLocalX0; }
+  else if (rot===180){ dx=trimOriginX+trimDrawW+trimLocalX0; dy=trimOriginY+trimDrawH+trimLocalY0; }
+  else { dx=trimOriginX-trimLocalY0; dy=trimOriginY+trimDrawH+trimLocalX0; } // 270
+
+  page.drawPage(emb, {x:dx, y:dy, width:dw, height:dh, rotate:PDFLib.degrees(rot)});
+}
+
+async function imposeExtraStep(prevDoc, stepDef){
+  const {w,h} = getStepPaperDims(stepDef);
+  const marginL = mm2pt(stepDef.marginL||0), marginT = mm2pt(stepDef.marginT||0);
+  const marginR = mm2pt(stepDef.marginR||0), marginB = mm2pt(stepDef.marginB||0);
+  const gutterH = mm2pt(stepDef.gutterH||0), gutterV = mm2pt(stepDef.gutterV||0);
+  const rot = parseInt(stepDef.rotate)||0;
+  const autoscale = stepDef.type==='booklet' ? true : (stepDef.autoscale !== false);
+  const preserveAspect = stepDef.type==='booklet' ? true : (stepDef.preserveAspect !== false);
+  const pages = prevDoc.getPages();
+  const outDoc2 = await PDFLib.PDFDocument.create();
+
+  const sheets = stepDef.type === 'grid'
+    ? buildGridSheets(pages.length, stepDef)
+    : buildBookletSheets(pages.length, stepDef);
+
+  for(const sheet of sheets){
+    const {rows, cols, cells} = sheet;
+    const availW = w-marginL-marginR-(cols-1)*gutterH, availH = h-marginT-marginB-(rows-1)*gutterV;
+    let cellW, cellH, blockW, blockH;
+
+    if (autoscale){
+      cellW = availW/cols; cellH = availH/rows;
+      blockW = availW; blockH = availH;
+    } else {
+      // Natural size: derive the cell pitch — and therefore the TrimBox — from
+      // what Step 1 (or the previous step) actually produced, not the nominal
+      // margin-derived block.
+      let maxW=1, maxH=1;
+      cells.forEach(idx=>{ if(idx!=null && idx<pages.length){ const b=getBoxes(pages[idx]).trimBox; maxW=Math.max(maxW,b.width); maxH=Math.max(maxH,b.height); } });
+      cellW = maxW; cellH = maxH;
+      blockW = cols*cellW + (cols-1)*gutterH;
+      blockH = rows*cellH + (rows-1)*gutterV;
+    }
+    // Clamp so oversized natural-size content anchors at the page edge
+    // instead of centering into negative territory (which would push it,
+    // or a subsequent row/column, off the visible page entirely).
+    const originX = Math.max(0, (w-blockW)/2), originYTop = Math.max(0, (h-blockH)/2);
+
+    const page = outDoc2.addPage([w,h]);
+    for(let k=0;k<cells.length;k++){
+      const idx = cells[k];
+      if (idx===null || idx>=pages.length) continue;
+      const r = Math.floor(k/cols), c = k%cols;
+      const cellX = originX + c*(cellW+gutterH);
+      const cellY = h - (originYTop + r*(cellH+gutterV)) - cellH;
+      const edges = {left:c===0, right:c===cols-1, top:r===0, bottom:r===rows-1};
+      await embedIntoCell(outDoc2, page, pages[idx], cellX, cellY, cellW, cellH, edges, gutterH, gutterV, rot, autoscale, preserveAspect);
+    }
+
+    // No printer's marks here — Step 1 (or the previous step) already added
+    // them; repeating them on every further step would just duplicate marks.
+    setClampedTrimBox(page, originX, h-originYTop-blockH, blockW, blockH, w, h);
+    try{ page.setBleedBox(0, 0, w, h); }catch(e){}
+  }
+  return outDoc2;
+}
+
+// Clamps a trim box to the page's actual visible area (0,0,w,h). Natural-size
+// (Autoscale off) content can legitimately be bigger than the chosen sheet;
+// without this, the TrimBox would go negative/oversized — an invalid box
+// that different PDF viewers handle inconsistently (looks "sometimes broken").
+function setClampedTrimBox(page, x, y, width, height, w, h){
+  const x1 = Math.max(0, x), y1 = Math.max(0, y);
+  const x2 = Math.min(w, x+width), y2 = Math.min(h, y+height);
+  try{ page.setTrimBox(x1, y1, Math.max(1, x2-x1), Math.max(1, y2-y1)); }catch(e){}
+}
+
+function isRtl(){ return mode==='booklet' ? $('rtlBooklet').checked : $('rtl').checked; }
+function reverseRows(cells, rows, cols){
+  const out = new Array(cells.length);
+  for(let r=0;r<rows;r++) for(let c=0;c<cols;c++) out[r*cols+c] = cells[r*cols + (cols-1-c)];
+  return out;
+}
+
+// maps sequence index k (0-based, order pages are consumed) -> linear cell position in row-major grid
+function seqToCellPos(k, rows, cols, order){
+  const r = Math.floor(k/cols); let c = k % cols;
+  if (order === 'boustrophedon' && r % 2 === 1) c = cols - 1 - c;
+  return r*cols + c;
+}
+
+function buildGridSheets(numPages, params){
+  if (!numPages) return [];
+  const rows = Math.max(1, params.rows||1);
+  const cols = Math.max(1, params.cols||1);
+  const slots = rows*cols;
+  const arrangement = params.arrangement || 'sequential';
+  const rowOrderVal = params.rowOrder || 'raster';
+  const doubleSided = !!params.doubleSided;
+  const rtl = !!params.rtl;
+  let sheets = [];
+
+  // For 'sequential' and 'stack', each source page can be repeated N times
+  // in a row before moving to the next page (e.g. multiple copies per run).
+  const repeatCount = (arrangement==='sequential' || arrangement==='stack') ? Math.max(1, params.repeatCount||1) : 1;
+  const expandedPages = [];
+  for(let p=0;p<numPages;p++) for(let n=0;n<repeatCount;n++) expandedPages.push(p);
+  const totalUnits = expandedPages.length;
+
+  const cellsFrom = (idxForSlot) => {
+    const cells = new Array(slots).fill(null);
+    for(let k=0;k<slots;k++){
+      const i = idxForSlot(k);
+      const p = (i!=null && i<totalUnits) ? expandedPages[i] : null;
+      cells[seqToCellPos(k, rows, cols, rowOrderVal)] = p;
+    }
+    return cells;
+  };
+  const maybeRtl = (cells) => rtl ? reverseRows(cells, rows, cols) : cells;
+
+  if (arrangement === 'repeat'){
+    // step and repeat: each sheet is a single page repeated across every slot.
+    // "Page N" already equals "sheet N" here, so double-sided is simply
+    // odd page = front, the very next (even) page = back of the same sheet.
+    for(let p=0;p<numPages;p++){
+      sheets.push({ rows, cols, cells: maybeRtl(new Array(slots).fill(p)), tag:`Sheet ${p+1}` });
+    }
+    if (doubleSided){
+      if (sheets.length % 2 === 1) sheets.push({rows,cols,cells:new Array(slots).fill(null), tag:'blank'});
+      sheets = sheets.map((s,i)=>({...s, tag:`Sheet ${Math.floor(i/2)+1} · ${i%2===0?'front':'back'}`}));
+    }
+    return sheets;
+  }
+
+  // 'sequential' and 'stack': unique pages (each possibly repeated) tiled across the grid.
+  if (doubleSided){
+    // Physical sheets now hold 2x the pages (front + back). Front takes the
+    // odd page of each pair, back takes the following even page, at the
+    // *same* grid position — so cutting the sheet gives two-sided pieces
+    // where page N is the front and page N+1 is the back.
+    const nSheets = Math.ceil(totalUnits/(slots*2));
+    for(let ph=0; ph<nSheets; ph++){
+      const posIndex = k => arrangement==='stack' ? (k*nSheets+ph) : (ph*slots+k);
+      const frontCells = cellsFrom(k => 2*posIndex(k));
+      const backCellsRaw = cellsFrom(k => 2*posIndex(k)+1);
+      // Work-and-turn: the sheet is flipped left-right to print the back,
+      // so a card on the left of the front lands on the right of the back.
+      const backCells = reverseRows(backCellsRaw, rows, cols);
+      sheets.push({rows, cols, cells:maybeRtl(frontCells), tag:`Sheet ${ph+1} · front`});
+      sheets.push({rows, cols, cells:maybeRtl(backCells),  tag:`Sheet ${ph+1} · back`});
+    }
+  } else {
+    const nSheets = Math.ceil(totalUnits/slots);
+    for(let s=0;s<nSheets;s++){
+      const posIndex = k => arrangement==='stack' ? (k*nSheets+s) : (s*slots+k);
+      sheets.push({rows, cols, cells:maybeRtl(cellsFrom(posIndex)), tag:`Sheet ${s+1}`});
+    }
+  }
+  return sheets;
+}
+
+function buildBookletSheets(numPages, params){
+  if (!numPages) return [];
+  const duplexMode = params.duplexMode || 'auto';
+  const rtl = !!params.rtl;
+  const N = Math.ceil(numPages/4)*4;
+  const nSheets = N/4;
+  const toIdx = p => (p>=1 && p<=numPages) ? p-1 : null;
+  const arr = [];
+  for(let k=1;k<=nSheets;k++){
+    const fl=N-2*k+2, fr=2*k-1, bl=2*k, br=N-2*k+1;
+    arr.push({front:[toIdx(fl),toIdx(fr)], back:[toIdx(bl),toIdx(br)]});
+  }
+  const mkCells = c => rtl ? reverseRows(c,1,2) : c;
+  const out = [];
+  if (duplexMode === 'auto'){
+    arr.forEach((sh,i)=>{
+      out.push({rows:1,cols:2,cells:mkCells(sh.front), tag:`Sheet ${i+1} · front`});
+      out.push({rows:1,cols:2,cells:mkCells(sh.back), tag:`Sheet ${i+1} · back`, fold:true});
+    });
+  } else {
+    arr.forEach((sh,i)=> out.push({rows:1,cols:2,cells:mkCells(sh.front), tag:`Sheet ${i+1} · front`}));
+    for(let i=arr.length-1;i>=0;i--) out.push({rows:1,cols:2,cells:mkCells(arr[i].back), tag:`Sheet ${i+1} · back`});
+  }
+  return out;
+}
+
+function buildLayout(numPages){
+  if (numPages === undefined){ const d = currentDoc(); numPages = d ? d.numPages : 0; }
+  if (!numPages) return [];
+  const rtl = isRtl();
+
+  if (mode === 'grid'){
+    return buildGridSheets(numPages, {
+      rows: parseInt($('rows').value)||1,
+      cols: parseInt($('cols').value)||1,
+      arrangement: $('repeatMode').value,
+      rowOrder: rowOrder,
+      repeatCount: parseInt($('repeatCount').value)||1,
+      doubleSided: $('doubleSided').checked,
+      rtl
+    });
+  } else {
+    return buildBookletSheets(numPages, {
+      duplexMode: $('duplexMode').value,
+      rtl
+    });
+  }
+}
+
+// compute geometry for a sheet: returns {cellW,cellH,originX,originYTop} in points (PDF coord: originYTop measured from top)
+function computeGeometry(sheet, w, h, pageDims){
+  if (pageDims === undefined){ const d = currentDoc(); pageDims = d ? d.pageDims : []; }
+  const isBooklet = mode==='booklet';
+  const bookletWhiteSpace = isBooklet && $('bookletWhiteSpace').checked;
+  const useFitPath = isBooklet ? bookletWhiteSpace : $('autoscale').checked;
+  // Margins/gutter (White Space) are independent of the stretch-vs-natural-size
+  // choice for Grid — they always apply there. Booklet is the only mode where
+  // they're gated behind the white-space checkbox.
+  const applyWhiteSpace = isBooklet ? bookletWhiteSpace : true;
+
+  const marginL = applyWhiteSpace ? mm2pt(parseFloat($('marginL').value)||0) : 0;
+  const marginT = applyWhiteSpace ? mm2pt(parseFloat($('marginT').value)||0) : 0;
+  const marginR = applyWhiteSpace ? mm2pt(parseFloat($('marginR').value)||0) : 0;
+  const marginB = applyWhiteSpace ? mm2pt(parseFloat($('marginB').value)||0) : 0;
+  const gutterH = applyWhiteSpace ? mm2pt(parseFloat($('gutterH').value)||0) : 0;
+  const gutterV = applyWhiteSpace ? mm2pt(parseFloat($('gutterV').value)||0) : 0;
+  const {rows, cols, cells} = sheet;
+  let cellW, cellH, blockW, blockH;
+
+  if (useFitPath){
+    blockW = w - marginL - marginR;
+    blockH = h - marginT - marginB;
+    cellW = (blockW - (cols-1)*gutterH)/cols;
+    cellH = (blockH - (rows-1)*gutterV)/rows;
+  } else {
+    // Natural size: cells sized to the actual page trim (no stretching), so
+    // the imposed content — and the TrimBox we record for it — reflects the
+    // real finished dimensions rather than being scaled to fill the sheet.
+    let maxW=1, maxH=1;
+    cells.forEach(idx=>{ if(idx!=null){ const d=pageDims[idx]; if(d){ maxW=Math.max(maxW,d.w); maxH=Math.max(maxH,d.h);} } });
+    cellW = maxW; cellH = maxH;
+    blockW = cols*cellW + (cols-1)*gutterH;
+    blockH = rows*cellH + (rows-1)*gutterV;
+  }
+
+  let originX, originYTop;
+  if ($('centerOnPage').checked || (isBooklet && !useFitPath)){
+    // Clamp so oversized natural-size content anchors at the page edge
+    // instead of centering into negative territory.
+    originX = Math.max(0, (w - blockW)/2);
+    originYTop = Math.max(0, (h - blockH)/2);
+  } else {
+    originX = marginL; originYTop = marginT;
+  }
+  return {cellW, cellH, gutterH, gutterV, originX, originYTop, blockW, blockH, marginL, marginT, marginR, marginB};
+}
+
+// Lightweight geometry for previewing an extra step's schematic layout,
+// using that step's own margin/gutter (computeGeometry is tied to Step 1's
+// global White Space fields and isn't appropriate here).
+function computeStepPreviewGeometry(step, w, h, cols, rows){
+  const marginL = mm2pt(step.marginL||0), marginT = mm2pt(step.marginT||0);
+  const marginR = mm2pt(step.marginR||0), marginB = mm2pt(step.marginB||0);
+  const gutterH = mm2pt(step.gutterH||0), gutterV = mm2pt(step.gutterV||0);
+  const blockW = w-marginL-marginR, blockH = h-marginT-marginB;
+  const cellW = (blockW-(cols-1)*gutterH)/cols, cellH = (blockH-(rows-1)*gutterV)/rows;
+  return {cellW, cellH, gutterH, gutterV, originX:marginL, originYTop:marginT, blockW, blockH};
+}
+
+// Renders crop/gutter/center marks for the on-screen preview, using the exact
+// same corner/gutter/center math as drawPrinterMarks (the real PDF output),
+// just emitting positioned line divs in CSS pixel space instead of PDF ops.
+function renderMarksHtml(sheet, geo, h, scale){
+  const cropOn = $('cropMarks').checked, gutOn = $('gutterMarks').checked, centerOn = $('centerMarks').checked;
+  if (!cropOn && !gutOn && !centerOn) return '';
+  const lenPt = mm2pt(parseFloat($('markLength').value)||0);
+  const distPt = mm2pt(parseFloat($('markDistance').value)||0);
+  const thickPt = mm2pt(parseFloat($('markThickness').value)||0.25);
+
+  const bx = geo.originX, by = h - geo.originYTop - geo.blockH;
+  const bw = geo.blockW, bh = geo.blockH;
+  const ticks = [];
+  const tick = (x1,y1,x2,y2) => ticks.push([x1,y1,x2,y2]);
+
+  if (cropOn){
+    const corners = [
+      {x:bx, y:by+bh, ox:-1, oy:1}, {x:bx+bw, y:by+bh, ox:1, oy:1},
+      {x:bx, y:by, ox:-1, oy:-1}, {x:bx+bw, y:by, ox:1, oy:-1},
+    ];
+    corners.forEach(({x,y,ox,oy})=>{
+      tick(x+ox*distPt, y, x+ox*(distPt+lenPt), y);
+      tick(x, y+oy*distPt, x, y+oy*(distPt+lenPt));
+    });
+  }
+  if (centerOn){
+    const midX=bx+bw/2, midY=by+bh/2;
+    tick(midX, by+bh+distPt, midX, by+bh+distPt+lenPt);
+    tick(midX, by-distPt, midX, by-distPt-lenPt);
+    tick(bx-distPt, midY, bx-distPt-lenPt, midY);
+    tick(bx+bw+distPt, midY, bx+bw+distPt+lenPt, midY);
+  }
+  if (gutOn){
+    const {cellW, cellH, gutterH, gutterV} = geo;
+    for(let c=1;c<sheet.cols;c++){
+      const leftCellRight = bx+(c-1)*(cellW+gutterH)+cellW;
+      const rightCellLeft = bx+c*(cellW+gutterH);
+      [by+bh, by].forEach(y=>{
+        const dir=(y===by+bh)?1:-1;
+        tick(leftCellRight, y+dir*distPt, leftCellRight, y+dir*(distPt+lenPt));
+        tick(rightCellLeft, y+dir*distPt, rightCellLeft, y+dir*(distPt+lenPt));
+      });
+    }
+    for(let r=1;r<sheet.rows;r++){
+      const aboveBottomOffset=(r-1)*(cellH+gutterV)+cellH;
+      const belowTopOffset=r*(cellH+gutterV);
+      const yAboveBottom=by+bh-aboveBottomOffset;
+      const yBelowTop=by+bh-belowTopOffset;
+      [bx, bx+bw].forEach(x=>{
+        const dir=(x===bx)?-1:1;
+        tick(x+dir*distPt, yAboveBottom, x+dir*(distPt+lenPt), yAboveBottom);
+        tick(x+dir*distPt, yBelowTop, x+dir*(distPt+lenPt), yBelowTop);
+      });
+    }
+  }
+
+  const toScreen = (x,y) => ({sx: x*scale, sy: (h-y)*scale});
+  return ticks.map(([x1,y1,x2,y2])=>{
+    const p1=toScreen(x1,y1), p2=toScreen(x2,y2);
+    const dx=p2.sx-p1.sx, dy=p2.sy-p1.sy;
+    const length = Math.sqrt(dx*dx+dy*dy) || 0.5;
+    const angle = Math.atan2(dy,dx)*180/Math.PI;
+    const thickPx = Math.max(1, thickPt*scale);
+    return `<div style="position:absolute;left:${p1.sx}px;top:${p1.sy-thickPx/2}px;width:${length}px;height:${thickPx}px;background:var(--signal);transform-origin:0 50%;transform:rotate(${angle}deg);pointer-events:none;"></div>`;
+  }).join('');
+}
+
+function update(){
+  const doc = currentDoc();
+  if (!doc) return;
+  const layout = buildLayout(doc.numPages);
+  const {w,h} = getSheetDims(doc);
+  let summaryHtml = `<span class="n">${doc.numPages}</span> source pages &rarr; <span class="n">${layout.length}</span> output sheet${layout.length!==1?'s':''} (Step 1)<br>Paper <span class="n">${$('paperSize').value}</span> · ${$('landscape').checked?'landscape':'portrait'} · ${pt2mm(w).toFixed(1)}&times;${pt2mm(h).toFixed(1)}mm`;
+
+  // Track the LAST step's sheets/dims — that's what actually gets previewed,
+  // since that's the real final result of the whole chain.
+  let chainCount = layout.length;
+  let stepBeforeSheets = layout;
+  let finalSheets = layout, finalW = w, finalH = h, finalStepNum = 1, finalStepDef = null;
+  let finalInputSheets = null, finalInputIsStep1 = false;
+  extraSteps.forEach((step, i)=>{
+    const sheets = step.type==='grid' ? buildGridSheets(chainCount, step) : buildBookletSheets(chainCount, step);
+    const dims = getStepPaperDims(step);
+    summaryHtml += `<br><span class="n">${chainCount}</span> in &rarr; <span class="n">${sheets.length}</span> output sheet${sheets.length!==1?'s':''} (Step ${i+2}, ${step.type}) · ${pt2mm(dims.w).toFixed(1)}&times;${pt2mm(dims.h).toFixed(1)}mm`;
+    finalInputSheets = stepBeforeSheets;
+    finalInputIsStep1 = (i===0);
+    chainCount = sheets.length;
+    finalSheets = sheets; finalW = dims.w; finalH = dims.h; finalStepNum = i+2; finalStepDef = step;
+    stepBeforeSheets = sheets;
+  });
+  $('summary').innerHTML = summaryHtml;
+  $('sheetCountLabel').textContent = finalSheets.length + ' output pages' + (state.docs.length>1 ? ` (previewing: ${escapeHtml(doc.fileName)})` : '');
+  $('sheetsHeading').textContent = extraSteps.length ? `Imposed sheets — final result (Step ${finalStepNum} of ${extraSteps.length+1})` : 'Imposed sheets';
+
+  const previewMaxW = 220 * previewZoom;
+  const scale = previewMaxW / finalW;
+  const cropOn = $('cropMarks').checked;
+  const isFinalStepOne = (finalStepNum === 1);
+
+  $('sheetsGrid').innerHTML = finalSheets.map(sheet=>{
+    const geo = isFinalStepOne
+      ? computeGeometry(sheet, finalW, finalH, getEffectivePageDims(doc))
+      : computeStepPreviewGeometry(finalStepDef, finalW, finalH, sheet.cols, sheet.rows);
+    const pw = finalW*scale, ph = finalH*scale;
+    const rotVal = parseInt($('rotatePage').value)||0;
+    const cellsHtml = sheet.cells.map(idx=>{
+      if (idx===null) return `<div class="cell blank"></div>`;
+      if (isFinalStepOne){
+        const src = doc.thumbs[idx] || '';
+        const cellRot = effectiveRotation(idx, rotVal);
+        const style = cellRot ? ` style="transform:rotate(-${cellRot}deg);"` : '';
+        return `<div class="cell"><img src="${src}"${style}></div>`;
+      }
+      // Extra steps impose already-composed sheets, not source pages. When
+      // the sheet feeding this step is Step 1's own output, we know exactly
+      // which source thumbnails it contains, so nest a small real preview
+      // of it instead of a bare placeholder number.
+      const srcSheet = finalInputSheets ? finalInputSheets[idx] : null;
+      if (finalInputIsStep1 && srcSheet){
+        const nestedCells = srcSheet.cells.map(srcIdx => {
+          if (srcIdx===null) return `<div class="cell blank" style="border:none;"></div>`;
+          const cellRot = effectiveRotation(srcIdx, rotVal);
+          const style = cellRot ? ` style="transform:rotate(-${cellRot}deg);"` : '';
+          return `<div class="cell" style="border:none;"><img src="${doc.thumbs[srcIdx] || ''}"${style}></div>`;
+        }).join('');
+        return `<div class="cell" style="padding:0;overflow:hidden;">
+          <div style="display:grid;width:100%;height:100%;grid-template-columns:repeat(${srcSheet.cols},minmax(0,1fr));grid-template-rows:repeat(${srcSheet.rows},minmax(0,1fr));gap:1px;">
+            ${nestedCells}
+          </div>
+        </div>`;
+      }
+      return `<div class="cell" style="font-family:var(--mono);font-size:13px;color:var(--ink-soft);">${idx+1}</div>`;
+    }).join('');
+    const marks = renderMarksHtml(sheet, geo, finalH, scale);
+    const boxLeft = geo.originX*scale, boxTop = geo.originYTop*scale, boxW = geo.blockW*scale, boxH = geo.blockH*scale;
+    return `<div class="sheet-outer">
+      <div class="sheet-label"><span>${sheet.tag}</span><span>${pt2mm(finalW).toFixed(1)}&times;${pt2mm(finalH).toFixed(1)}mm</span></div>
+      <div class="sheet-frame" style="width:${pw}px;height:${ph}px;">
+        <div class="marginbox" style="left:${boxLeft}px;top:${boxTop}px;width:${boxW}px;height:${boxH}px;">
+          <div class="cellgrid" style="grid-template-columns:repeat(${sheet.cols},minmax(0,1fr));grid-template-rows:repeat(${sheet.rows},minmax(0,1fr));gap:${geo.gutterV*scale}px ${geo.gutterH*scale}px;">
+            ${cellsHtml}
+          </div>
+        </div>
+        ${marks}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ---- printer's marks drawing (pdf-lib) ----
+
+// "Registration" in prepress is a dedicated colorant — PDF's reserved
+// Separation name "All" — that prints at 100% on *every* plate the job
+// uses, including any spot colors, not just C/M/Y/K. That can't be
+// expressed as an RGB or plain CMYK value, so we build the actual
+// /Separation /All colorspace and write raw content-stream operators.
+const allSeparationCache = new WeakMap();
+
+function getAllSeparationRef(doc){
+  if (allSeparationCache.has(doc)) return allSeparationCache.get(doc);
+  let ref = null;
+  try{
+    const ctx = doc.context;
+    // Identity tint transform: tint 0 -> 0, tint 1 -> 1 (full ink on every plate)
+    const tintFn = ctx.obj({ FunctionType:2, Domain:[0,1], C0:[0], C1:[1], N:1 });
+    const fnRef = ctx.register(tintFn);
+    const csArray = ctx.obj([
+      PDFLib.PDFName.of('Separation'),
+      PDFLib.PDFName.of('All'),
+      PDFLib.PDFName.of('DeviceGray'),
+      fnRef
+    ]);
+    ref = ctx.register(csArray);
+  } catch(e){ ref = null; }
+  allSeparationCache.set(doc, ref);
+  return ref;
+}
+
+function ensureColorSpaceName(page, csRef){
+  const CS_NAME = 'RegAll';
+  try{
+    let resources = page.node.Resources ? page.node.Resources() : undefined;
+    if (!resources){
+      resources = page.doc.context.obj({});
+      page.node.set(PDFLib.PDFName.of('Resources'), resources);
+    }
+    let csDict = resources.get(PDFLib.PDFName.of('ColorSpace'));
+    if (csDict && csDict instanceof PDFLib.PDFRef) csDict = page.doc.context.lookup(csDict);
+    if (!csDict){
+      csDict = page.doc.context.obj({});
+      resources.set(PDFLib.PDFName.of('ColorSpace'), csDict);
+    }
+    csDict.set(PDFLib.PDFName.of(CS_NAME), csRef);
+    return CS_NAME;
+  } catch(e){ return null; }
+}
+
+function strokeRegistrationLine(page, x1,y1,x2,y2, thickness){
+  const csRef = getAllSeparationRef(page.doc);
+  if (!csRef) return false;
+  const csName = ensureColorSpaceName(page, csRef);
+  if (!csName) return false;
+  try{
+    page.pushOperators(
+      PDFLib.pushGraphicsState(),
+      PDFLib.PDFOperator.of('CS', [PDFLib.PDFName.of(csName)]),
+      PDFLib.PDFOperator.of('SCN', [PDFLib.PDFNumber.of(1)]),
+      PDFLib.setLineWidth(thickness),
+      PDFLib.moveTo(x1,y1),
+      PDFLib.lineTo(x2,y2),
+      PDFLib.PDFOperator.of('S', []),
+      PDFLib.popGraphicsState()
+    );
+    return true;
+  } catch(e){ return false; }
+}
+
+function drawTick(page, x1,y1,x2,y2, knockout, thickness){
+  if (knockout){
+    const pad = mm2pt(0.6);
+    page.drawRectangle({
+      x: Math.min(x1,x2)-pad, y: Math.min(y1,y2)-pad,
+      width: Math.abs(x2-x1)+pad*2 || pad*2, height: Math.abs(y2-y1)+pad*2 || pad*2,
+      color: PDFLib.rgb(1,1,1)
+    });
+  }
+  const registration = $('registrationColor').checked;
+  // Try the real /Separation /All colorant first; only fall back to a
+  // plain CMYK approximation if the low-level operator path fails.
+  if (registration && strokeRegistrationLine(page, x1,y1,x2,y2, thickness)) return;
+  page.drawLine({start:{x:x1,y:y1}, end:{x:x2,y:y2}, thickness, color: registration ? PDFLib.cmyk(1,1,1,1) : PDFLib.cmyk(0,0,0,1)});
+}
+
+function drawPrinterMarks(page, sheet, w, h, geo){
+  const cropOn = $('cropMarks').checked, gutOn = $('gutterMarks').checked, centerOn = $('centerMarks').checked;
+  if (!cropOn && !gutOn && !centerOn) return;
+  const len = mm2pt(parseFloat($('markLength').value)||0);
+  const thick = mm2pt(parseFloat($('markThickness').value)||0.25);
+  const dist = mm2pt(parseFloat($('markDistance').value)||0);
+  const ko = $('knockout').checked;
+
+  const bx = geo.originX, by = h - geo.originYTop - geo.blockH; // box bottom-left in PDF coords
+  const bw = geo.blockW, bh = geo.blockH;
+
+  if (cropOn){
+    const corners = [
+      {x:bx, y:by+bh, ox:-1, oy:1},
+      {x:bx+bw, y:by+bh, ox:1, oy:1},
+      {x:bx, y:by, ox:-1, oy:-1},
+      {x:bx+bw, y:by, ox:1, oy:-1},
+    ];
+    corners.forEach(({x,y,ox,oy})=>{
+      drawTick(page, x+ox*dist, y, x+ox*(dist+len), y, ko, thick);
+      drawTick(page, x, y+oy*dist, x, y+oy*(dist+len), ko, thick);
+    });
+  }
+
+  if (centerOn){
+    const midX = bx+bw/2, midY = by+bh/2;
+    drawTick(page, midX, by+bh+dist, midX, by+bh+dist+len, ko, thick);
+    drawTick(page, midX, by-dist, midX, by-dist-len, ko, thick);
+    drawTick(page, bx-dist, midY, bx-dist-len, midY, ko, thick);
+    drawTick(page, bx+bw+dist, midY, bx+bw+dist+len, midY, ko, thick);
+  }
+
+  if (gutOn){
+    const {cellW, cellH, gutterH, gutterV} = geo;
+    // vertical gutters (between columns): tick at each cell's own trim edge, not the gutter midpoint
+    for(let c=1;c<sheet.cols;c++){
+      const leftCellRight = bx + (c-1)*(cellW+gutterH) + cellW;
+      const rightCellLeft = bx + c*(cellW+gutterH);
+      [by+bh, by].forEach(y=>{ // top edge, bottom edge of block
+        const dir = (y===by+bh) ? 1 : -1;
+        drawTick(page, leftCellRight, y+dir*dist, leftCellRight, y+dir*(dist+len), ko, thick);
+        drawTick(page, rightCellLeft, y+dir*dist, rightCellLeft, y+dir*(dist+len), ko, thick);
+      });
+    }
+    // horizontal gutters (between rows): tick at each cell's own trim edge
+    for(let r=1;r<sheet.rows;r++){
+      const aboveBottomOffset = (r-1)*(cellH+gutterV) + cellH;
+      const belowTopOffset = r*(cellH+gutterV);
+      const yAboveBottom = by+bh-aboveBottomOffset;
+      const yBelowTop = by+bh-belowTopOffset;
+      [bx, bx+bw].forEach(x=>{ // left edge, right edge of block
+        const dir = (x===bx) ? -1 : 1;
+        drawTick(page, x+dir*dist, yAboveBottom, x+dir*(dist+len), yAboveBottom, ko, thick);
+        drawTick(page, x+dir*dist, yBelowTop, x+dir*(dist+len), yBelowTop, ko, thick);
+      });
+    }
+  }
+}
+
+// ---- generation ----
+$('generateBtn').addEventListener('click', async ()=>{
+  if (!state.docs.length) return;
+  const btn = $('generateBtn'); btn.disabled = true;
+  const multi = state.docs.length > 1;
+  const preserveAspect = $('preserveAspect').checked || !$('autoscale').checked;
+  const autoscale = $('autoscale').checked;
+  const baseRot = parseInt($('rotatePage').value) || 0; // 0/90/180/270, CCW
+
+  // Overlay image / text settings (read once, applied per matching output page)
+  const overlayPagesSpec = parsePagesSpec($('overlayPages').value);
+  const overlayRepeat = $('overlayRepeat').checked;
+  const overlayAnchorRow = parseInt($('overlayAnchor').dataset.row), overlayAnchorCol = parseInt($('overlayAnchor').dataset.col);
+  const overlayPaddingPt = mm2pt(parseFloat($('overlayPadding').value)||0);
+  const overlayOpacity = Math.max(0, Math.min(100, parseFloat($('overlayOpacity').value)||100))/100;
+  const overlayBlend = $('overlayBlend').value;
+
+  const textContent = $('textContent').value;
+  const textPagesSpec = parsePagesSpec($('textPages').value);
+  const textAnchorRow = parseInt($('textAnchor').dataset.row), textAnchorCol = parseInt($('textAnchor').dataset.col);
+  const textMarginLeftPt = mm2pt(parseFloat($('textMarginLeft').value)||0);
+  const textMarginTopPt = mm2pt(parseFloat($('textMarginTop').value)||0);
+  const textAlternateSides = $('textAlternateSides').checked;
+  const textSize = parseFloat($('textSize').value)||24;
+  const textOpacity = Math.max(0, Math.min(100, parseFloat($('textOpacity').value)||100))/100;
+  const textRotateDeg = parseInt($('textRotatePicker').dataset.rotate) || 0;
+  const textColor = $('textColorMode').value === 'cmyk'
+    ? PDFLib.cmyk(
+        Math.max(0,Math.min(100,parseFloat($('textC').value)||0))/100,
+        Math.max(0,Math.min(100,parseFloat($('textM').value)||0))/100,
+        Math.max(0,Math.min(100,parseFloat($('textY').value)||0))/100,
+        Math.max(0,Math.min(100,parseFloat($('textK').value)||0))/100
+      )
+    : hexToRgb01($('textColor').value);
+
+  try{
+    const outputs = []; // {name, bytes}
+
+    for (const doc of state.docs){
+      btn.textContent = multi ? `Generating ${doc.fileName}…` : 'Generating…';
+      setStatus(multi ? `Building ${doc.fileName}…` : 'Building imposed PDF…');
+
+      const layout = buildLayout(doc.numPages);
+      const {w,h} = getSheetDims(doc);
+      const srcDoc = await PDFLib.PDFDocument.load(doc.bytes.slice(0));
+      const outDoc = await PDFLib.PDFDocument.create();
+      const srcPages = srcDoc.getPages();
+
+      const boxCache = {};
+      const embedCache = {};
+      const getBoxesCached = (idx) => boxCache[idx] || (boxCache[idx] = getBoxes(srcPages[idx]));
+
+      let overlayEmbed = null, overlayIsPdf = false;
+      if (overlayState){
+        if (overlayState.kind === 'pdf'){
+          const overlayPdfDoc = await PDFLib.PDFDocument.load(overlayState.bytes.slice(0));
+          const overlaySrcPage = overlayPdfDoc.getPages()[0];
+          const obox = getBoxes(overlaySrcPage).trimBox;
+          overlayEmbed = await outDoc.embedPage(overlaySrcPage, {
+            left: obox.x, bottom: obox.y, right: obox.x+obox.width, top: obox.y+obox.height
+          });
+          overlayIsPdf = true;
+        } else {
+          overlayEmbed = overlayState.kind==='png'
+            ? await outDoc.embedPng(overlayState.bytes.slice(0))
+            : await outDoc.embedJpg(overlayState.bytes.slice(0));
+        }
+      }
+      let textFont = null;
+      if (textContent && textContent.trim()){
+        textFont = await outDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+      }
+      let outputPageNum = 0;
+
+      for(const sheet of layout){
+        const page = outDoc.addPage([w,h]);
+        outputPageNum++;
+        const geo = computeGeometry(sheet, w, h, getEffectivePageDims(doc));
+        const {cellW, cellH, gutterH, gutterV, originX, originYTop} = geo;
+        const {rows, cols, cells} = sheet;
+
+        for(let j=0;j<cells.length;j++){
+          const idx = cells[j];
+          if (idx===null) continue;
+          const rot = effectiveRotation(idx, baseRot);
+          const swapped = (rot===90 || rot===270);
+          const r = Math.floor(j/cols), c = j%cols;
+          const cellX = originX + c*(cellW+gutterH);
+          const cellYTop = originYTop + r*(cellH+gutterV);
+          const cellY = h - cellYTop - cellH;
+
+          const boxes = getBoxesCached(idx);
+          const trimBox = boxes.trimBox;
+          // Bleed re-expressed in OUTPUT orientation, so "which edge is internal
+          // vs. against the margin" is evaluated correctly after rotation.
+          const outputBleedFull = rotateBleed(boxes.bleed, rot);
+
+          // Effective (post-rotation) trim footprint drives the fit scale.
+          const effTrimW = swapped ? trimBox.height : trimBox.width;
+          const effTrimH = swapped ? trimBox.width  : trimBox.height;
+
+          let scaleX, scaleY;
+          if (!autoscale){
+            scaleX = scaleY = 1;
+          } else if (preserveAspect){
+            scaleX = scaleY = Math.min(cellW/effTrimW, cellH/effTrimH);
+          } else {
+            scaleX = cellW/effTrimW; scaleY = cellH/effTrimH;
+          }
+
+          // Cap bleed on internal (shared) gutter edges to half the gutter, so
+          // neighboring pages' bleed meets exactly in the middle. Outer edges
+          // (against the sheet margin) keep the page's full defined bleed.
+          const isLeftEdge = c===0, isRightEdge = c===cols-1, isTopEdge = r===0, isBottomEdge = r===rows-1;
+          const halfGutterH = (gutterH/2)/scaleX;
+          const halfGutterV = (gutterV/2)/scaleY;
+          const outAllow = {
+            left:   isLeftEdge   ? outputBleedFull.left   : Math.min(outputBleedFull.left,   halfGutterH),
+            right:  isRightEdge  ? outputBleedFull.right  : Math.min(outputBleedFull.right,  halfGutterH),
+            top:    isTopEdge    ? outputBleedFull.top    : Math.min(outputBleedFull.top,    halfGutterV),
+            bottom: isBottomEdge ? outputBleedFull.bottom : Math.min(outputBleedFull.bottom, halfGutterV),
+          };
+          // Convert the allowed amounts back to source-space side labels for embedding.
+          const srcAllow = rotateBleed(outAllow, (360-rot)%360);
+
+          const key = idx+'|'+rot+'|'+srcAllow.left+','+srcAllow.right+','+srcAllow.top+','+srcAllow.bottom;
+          let emb = embedCache[key];
+          if (!emb){
+            emb = await outDoc.embedPage(srcPages[idx], {
+              left: trimBox.x - srcAllow.left,
+              bottom: trimBox.y - srcAllow.bottom,
+              right: trimBox.x + trimBox.width + srcAllow.right,
+              top: trimBox.y + trimBox.height + srcAllow.top
+            });
+            embedCache[key] = emb;
+          }
+
+          const trimDrawW = effTrimW*scaleX, trimDrawH = effTrimH*scaleY;
+          const trimOriginX = cellX + (cellW-trimDrawW)/2;
+          const trimOriginY = cellY + (cellH-trimDrawH)/2;
+
+          // localScaleX/Y apply along the SOURCE page's own width/height axes;
+          // for a 90/270 rotation those axes are swapped relative to output x/y.
+          const localScaleX = swapped ? scaleY : scaleX;
+          const localScaleY = swapped ? scaleX : scaleY;
+          const trimLocalX0 = srcAllow.left*localScaleX;
+          const trimLocalY0 = srcAllow.bottom*localScaleY;
+          const dw = emb.width*localScaleX, dh = emb.height*localScaleY;
+
+          let dx, dy;
+          if (rot===0){ dx = trimOriginX - trimLocalX0; dy = trimOriginY - trimLocalY0; }
+          else if (rot===90){ dx = trimOriginX + trimDrawW + trimLocalY0; dy = trimOriginY - trimLocalX0; }
+          else if (rot===180){ dx = trimOriginX + trimDrawW + trimLocalX0; dy = trimOriginY + trimDrawH + trimLocalY0; }
+          else { dx = trimOriginX - trimLocalY0; dy = trimOriginY + trimDrawH + trimLocalX0; } // 270
+
+          page.drawPage(emb, {x:dx, y:dy, width:dw, height:dh, rotate:PDFLib.degrees(rot)});
+        }
+
+        drawPrinterMarks(page, sheet, w, h, geo);
+        // TrimBox = the actual imposed artwork block (the cells actually used),
+        // distinct from the sheet's full MediaBox which may include margin for marks.
+        // BleedBox = the full sheet, so any bleed drawn out into the margin area
+        // is still captured if this result gets fed into a further chained step.
+        setClampedTrimBox(page, geo.originX, h-geo.originYTop-geo.blockH, geo.blockW, geo.blockH, w, h);
+        try{ page.setBleedBox(0, 0, w, h); }catch(e){}
+
+        // ---- Overlay image ----
+        if (overlayEmbed){
+          const wantsThisPage = overlayRepeat ? pageMatches(overlayPagesSpec, outputPageNum) : (outputPageNum===1 && pageMatches(overlayPagesSpec, outputPageNum));
+          if (wantsThisPage){
+            // Actual size: 1 PDF point = 1 point of the overlay's own TrimBox
+            // (for a PDF overlay) or 1 pixel (for a raster overlay) — no
+            // auto-scaling. Position is still anchored relative to this
+            // sheet's real dimensions (w, h).
+            const ow = overlayEmbed.width, oh = overlayEmbed.height;
+            const {x:ox, y:oy} = anchorPosition(overlayAnchorRow, overlayAnchorCol, ow, oh, w, h, overlayPaddingPt);
+            const gsName = ensureExtGState(page, {ca: overlayOpacity, BM: overlayBlend});
+            if (gsName){
+              page.pushOperators(PDFLib.pushGraphicsState(), PDFLib.PDFOperator.of('gs', [PDFLib.PDFName.of(gsName)]));
+              if (overlayIsPdf) page.drawPage(overlayEmbed, {x:ox, y:oy, width:ow, height:oh});
+              else page.drawImage(overlayEmbed, {x:ox, y:oy, width:ow, height:oh});
+              page.pushOperators(PDFLib.popGraphicsState());
+            } else if (overlayIsPdf){
+              page.drawPage(overlayEmbed, {x:ox, y:oy, width:ow, height:oh, opacity:overlayOpacity});
+            } else {
+              page.drawImage(overlayEmbed, {x:ox, y:oy, width:ow, height:oh, opacity:overlayOpacity});
+            }
+          }
+        }
+
+        // ---- Text overlay ----
+        if (textFont && textContent.trim() && pageMatches(textPagesSpec, outputPageNum)){
+          const tw = textFont.widthOfTextAtSize(textContent, textSize);
+          const th = textFont.heightAtSize(textSize);
+          // Alternate sides: even pages get their column mirrored (left<->right),
+          // so facing pages place the text symmetrically (like running headers).
+          const isEven = outputPageNum % 2 === 0;
+          const effectiveCol = (textAlternateSides && isEven) ? (2 - textAnchorCol) : textAnchorCol;
+          const {x:tx, y:ty} = anchorPosition(textAnchorRow, effectiveCol, tw, th, w, h, textMarginLeftPt, textMarginTopPt);
+          page.drawText(textContent, {
+            x: tx, y: ty, size: textSize, font: textFont, color: textColor,
+            opacity: textOpacity, rotate: PDFLib.degrees(textRotateDeg)
+          });
+        }
+      }
+
+      let chainBytes = await outDoc.save();
+      for (const stepDef of extraSteps){
+        const stepInDoc = await PDFLib.PDFDocument.load(chainBytes);
+        const stepOutDoc = await imposeExtraStep(stepInDoc, stepDef);
+        chainBytes = await stepOutDoc.save();
+      }
+
+      const outBytes = chainBytes;
+      outputs.push({ name: `${doc.baseName}-imposed.pdf`, bytes: outBytes });
+    }
+
+    // Trigger a separate download per file (staggered slightly since browsers
+    // can throttle/block a burst of simultaneous automatic downloads).
+    outputs.forEach((o, i) => {
+      setTimeout(() => {
+        const blob = new Blob([o.bytes], {type:'application/pdf'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = o.name;
+        document.body.appendChild(a); a.click(); a.remove();
+      }, i*400);
+    });
+    const totalKB = outputs.reduce((sum,o)=>sum+o.bytes.length,0)/1024;
+    setStatus(outputs.length===1
+      ? `Done — ${totalKB.toFixed(0)} KB. Download started.`
+      : `Done — ${outputs.length} separate PDFs (${totalKB.toFixed(0)} KB total). Downloads started.`);
+  } catch(err){
+    console.error(err); setStatus('Generation failed: ' + err.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = multi ? `Generate ${state.docs.length} imposed PDFs` : 'Generate imposed PDF';
+  }
+});
+</script>
+</body>
+</html>
