@@ -2041,7 +2041,7 @@ function strokeRegistrationLine(page, x1,y1,x2,y2, thickness){
 
 function drawTick(page, x1,y1,x2,y2, knockout, thickness){
   if (knockout){
-    const pad = mm2pt(0.6);
+    const pad = mm2pt(0.2125);
     page.drawRectangle({
       x: Math.min(x1,x2)-pad, y: Math.min(y1,y2)-pad,
       width: Math.abs(x2-x1)+pad*2 || pad*2, height: Math.abs(y2-y1)+pad*2 || pad*2,
