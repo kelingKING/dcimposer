@@ -197,6 +197,21 @@
       </div>
 
       <div class="section-block">
+        <div class="section-label">Presets</div>
+        <div class="row2">
+          <div class="field">
+            <label for="presetSelect">Saved presets</label>
+            <select id="presetSelect"><option value="">— none saved —</option></select>
+          </div>
+          <div class="field"><label style="visibility:hidden;">Delete</label><button type="button" class="x-remove" id="presetDelete" title="Delete this preset" style="width:100%;height:36px;">&times;</button></div>
+        </div>
+        <div class="row2">
+          <button type="button" class="add-step-btn" id="presetLoad">Load Preset</button>
+          <button type="button" class="add-step-btn" id="presetSave">Save Preset</button>
+        </div>
+      </div>
+
+      <div class="section-block">
         <div class="step-badge">Step 1</div>
         <div class="section-label">Mode</div>
         <div class="segmented" id="modeSeg">
@@ -212,11 +227,11 @@
             <label for="paperSize">Preset</label>
             <select id="paperSize">
               <option value="A4">A4</option>
-              <option value="Letter" selected>Letter</option>
+              <option value="Letter">Letter</option>
               <option value="Legal">Legal</option>
               <option value="A3">A3</option>
               <option value="Tabloid">Tabloid</option>
-              <option value="SRA3">SRA3 (320×450mm)</option>
+              <option value="SRA3" selected>SRA3 (320×450mm)</option>
               <option value="Custom">Custom</option>
             </select>
           </div>
@@ -343,8 +358,8 @@
         </div>
         <div class="subgrid-title">Gutters (mm)</div>
         <div class="row2">
-          <div class="field"><label for="gutterH">Horizontal</label><input type="number" id="gutterH" value="4" min="0"></div>
-          <div class="field"><label for="gutterV">Vertical</label><input type="number" id="gutterV" value="4" min="0"></div>
+          <div class="field"><label for="gutterH">Horizontal</label><input type="number" id="gutterH" value="3" min="0"></div>
+          <div class="field"><label for="gutterV">Vertical</label><input type="number" id="gutterV" value="3" min="0"></div>
         </div>
         <label class="checkline"><input type="checkbox" id="centerOnPage" checked> Center output on page</label>
       </div>
@@ -611,13 +626,13 @@ document.querySelectorAll('#modeSeg button').forEach(btn=>{
 function defaultGridStep(){
   return {type:'grid', cols:2, rows:1, arrangement:'sequential', rowOrder:'raster', repeatCount:1, doubleSided:false, rtl:false,
     autoscale:false, preserveAspect:true,
-    paperSize:'Letter', customW:210, customH:297, landscape:false,
-    marginL:8, marginT:8, marginR:8, marginB:8, gutterH:4, gutterV:4, rotate:0};
+    paperSize:'SRA3', customW:210, customH:297, landscape:false,
+    marginL:8, marginT:8, marginR:8, marginB:8, gutterH:3, gutterV:3, rotate:0};
 }
 function defaultBookletStep(){
   return {type:'booklet', duplexMode:'auto', rtl:false,
-    paperSize:'Letter', customW:210, customH:297, landscape:true,
-    marginL:8, marginT:8, marginR:8, marginB:8, gutterH:4, gutterV:4, rotate:0};
+    paperSize:'SRA3', customW:210, customH:297, landscape:true,
+    marginL:8, marginT:8, marginR:8, marginB:8, gutterH:3, gutterV:3, rotate:0};
 }
 function defaultOverlayStep(){
   return {type:'overlay', overlayState:null, overlayRepeat:true, overlayBlend:'Multiply', overlayOpacity:100,
@@ -935,6 +950,147 @@ $('addStepAfter1').addEventListener('click', ()=>{
   extraSteps.push(defaultGridStep());
   renderExtraSteps();
   update();
+});
+
+// ---- Presets (save/load a full imposition setup, incl. the step chain) ----
+const PRESET_STORAGE_KEY = 'imposePresets_v1';
+const STEP1_FIELD_IDS = [
+  'autoscale','bookletWhiteSpace','centerMarks','centerOnPage','cols','cropMarks','customH','customW',
+  'doubleSided','duplexMode','gutterH','gutterMarks','gutterV','knockout','landscape','marginB','marginL','marginR','marginT',
+  'markDistance','markLength','markThickness','paperSize','preserveAspect','registrationColor','repeatCount','repeatMode',
+  'rotateApply','rotatePage','rows','rtl','rtlBooklet'
+];
+
+function bufToBase64(buf){
+  let binary = '';
+  const bytes = new Uint8Array(buf);
+  const chunk = 0x8000;
+  for (let i=0;i<bytes.length;i+=chunk) binary += String.fromCharCode.apply(null, bytes.subarray(i, i+chunk));
+  return btoa(binary);
+}
+function base64ToBuf(b64){
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i=0;i<binary.length;i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+// Overlay steps carry a raw ArrayBuffer (the uploaded file) — not JSON-safe —
+// so presets store it as base64 instead, and rebuild the blob preview URL on load.
+function serializeExtraSteps(steps){
+  return steps.map(step=>{
+    const clone = {...step};
+    if (clone.type==='overlay' && clone.overlayState){
+      clone.overlayState = {
+        kind: clone.overlayState.kind,
+        name: clone.overlayState.name,
+        bytesB64: bufToBase64(clone.overlayState.bytes)
+      };
+    }
+    return clone;
+  });
+}
+function deserializeExtraSteps(steps){
+  return (steps||[]).map(step=>{
+    const clone = {...step};
+    if (clone.type==='overlay' && clone.overlayState && clone.overlayState.bytesB64){
+      const bytes = base64ToBuf(clone.overlayState.bytesB64);
+      const kind = clone.overlayState.kind;
+      const previewUrl = kind==='pdf' ? '' : URL.createObjectURL(new Blob([bytes], {type: kind==='png'?'image/png':'image/jpeg'}));
+      clone.overlayState = { bytes, kind, name: clone.overlayState.name, previewUrl };
+    }
+    return clone;
+  });
+}
+
+function loadPresetsStore(){
+  try{ return JSON.parse(localStorage.getItem(PRESET_STORAGE_KEY) || '{}'); }
+  catch(e){ return {}; }
+}
+function savePresetsStore(store){
+  localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(store));
+}
+function populatePresetSelect(selectName){
+  const store = loadPresetsStore();
+  const names = Object.keys(store).sort((a,b)=>a.localeCompare(b));
+  const sel = $('presetSelect');
+  sel.innerHTML = `<option value="">— none saved —</option>` + names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  if (selectName && names.includes(selectName)) sel.value = selectName;
+}
+populatePresetSelect();
+
+function collectCurrentPreset(){
+  const step1 = {};
+  STEP1_FIELD_IDS.forEach(id=>{
+    const el = $(id);
+    if (!el) return;
+    step1[id] = el.type==='checkbox' ? el.checked : el.value;
+  });
+  return {
+    mode, rowOrder, step1,
+    extraSteps: serializeExtraSteps(extraStepsByMode[mode] || [])
+  };
+}
+
+function applyPreset(preset){
+  if (!preset) return;
+  // Apply Step 1 fields once, click the mode toggle (which resets some
+  // defaults as a side effect), then re-apply the saved fields so the
+  // preset's actual values win over the mode-switch defaults.
+  const applyFields = ()=> STEP1_FIELD_IDS.forEach(id=>{
+    if (!(id in (preset.step1||{}))) return;
+    const el = $(id);
+    if (!el) return;
+    if (el.type==='checkbox') el.checked = !!preset.step1[id];
+    else el.value = preset.step1[id];
+  });
+  applyFields();
+  const modeBtn = document.querySelector(`#modeSeg button[data-mode="${preset.mode||'grid'}"]`);
+  if (modeBtn) modeBtn.click();
+  applyFields();
+
+  $('customSize').style.display = $('paperSize').value==='Custom' ? 'grid':'none';
+  if (preset.rowOrder){
+    rowOrder = preset.rowOrder;
+    document.querySelectorAll('#rowOrderPick button').forEach(b=>b.classList.toggle('active', b.dataset.order===rowOrder));
+  }
+  $('preserveAspect').disabled = !$('autoscale').checked;
+  updateRepeatCountVisibility();
+  updateWhiteSpaceVisibility();
+
+  extraStepsByMode[mode] = deserializeExtraSteps(preset.extraSteps);
+  extraSteps = extraStepsByMode[mode];
+  renderExtraSteps();
+  update();
+}
+
+$('presetSave').addEventListener('click', ()=>{
+  const name = (prompt('Save this imposition as:') || '').trim();
+  if (!name) return;
+  const store = loadPresetsStore();
+  store[name] = collectCurrentPreset();
+  try{
+    savePresetsStore(store);
+    populatePresetSelect(name);
+    setStatus(`Preset "${name}" saved.`);
+  } catch(e){
+    alert('Could not save preset (storage may be full — overlay files make presets larger).');
+  }
+});
+$('presetLoad').addEventListener('click', ()=>{
+  const name = $('presetSelect').value;
+  if (!name) return;
+  const store = loadPresetsStore();
+  if (store[name]) applyPreset(store[name]);
+});
+$('presetDelete').addEventListener('click', ()=>{
+  const name = $('presetSelect').value;
+  if (!name) return;
+  if (!confirm(`Delete preset "${name}"?`)) return;
+  const store = loadPresetsStore();
+  delete store[name];
+  savePresetsStore(store);
+  populatePresetSelect();
 });
 
 function setZoom(z){
