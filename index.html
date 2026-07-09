@@ -163,10 +163,11 @@
   .sheet-outer{display:flex;flex-direction:column;align-items:flex-start;}
   .sheet-label{font-family:var(--mono);font-size:10px;color:var(--ink-soft);margin-bottom:6px;display:flex;justify-content:space-between;width:100%;gap:10px;}
   .sheet-frame{position:relative;background:var(--white);box-shadow:0 1px 2px rgba(0,0,0,.08);overflow:hidden;}
-  .marginbox{position:absolute;display:flex;align-items:center;justify-content:center;overflow:hidden;max-width:100%;max-height:100%;}
+  .marginbox{position:absolute;display:flex;align-items:center;justify-content:center;overflow:visible;max-width:100%;max-height:100%;}
   .cellgrid{display:grid;width:100%;height:100%;position:relative;min-width:0;min-height:0;}
-  .cell{border:1px dashed var(--line);position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;background:repeating-linear-gradient(45deg, var(--paper-alt) 0 6px, var(--white) 6px 12px);min-width:0;min-height:0;}
-  .cell img{max-width:100%;max-height:100%;object-fit:contain;box-shadow:0 0 0 1px var(--line-soft);}
+  .cell{position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;min-width:0;min-height:0;}
+  .cell.blank{border:1px dashed var(--line);background:repeating-linear-gradient(45deg, var(--paper-alt) 0 6px, var(--white) 6px 12px);}
+  .cell img{max-width:100%;max-height:100%;object-fit:contain;}
   .cell.blank::after{content:'blank';font-family:var(--mono);font-size:9px;color:var(--ink-soft);}
   .regmark{position:absolute;width:1px;height:1px;}
   .regmark .h,.regmark .v{position:absolute;background:var(--signal);}
@@ -593,10 +594,12 @@ async function handleFiles(fileList){
 
       const pdfLibDoc = await PDFLib.PDFDocument.load(buf.slice(0));
       const numPages = pdfLibDoc.getPageCount();
-      const pageDims = pdfLibDoc.getPages().map(p=>{ const b=getBoxes(p).trimBox; return {w:b.width, h:b.height}; });
+      const pageBoxes = pdfLibDoc.getPages().map(p=>getBoxes(p));
+      const pageDims = pageBoxes.map(b=>({w:b.trimBox.width, h:b.trimBox.height}));
 
       const pdfjsDoc = await pdfjsLib.getDocument({data: buf.slice(0)}).promise;
       const thumbs = [];
+      const thumbDims = [];
       const maxThumbs = Math.min(numPages, 300);
       for(let i=1;i<=maxThumbs;i++){
         const page = await pdfjsDoc.getPage(i);
@@ -607,9 +610,13 @@ async function handleFiles(fileList){
         canvas.width = scaledVp.width; canvas.height = scaledVp.height;
         await page.render({canvasContext: canvas.getContext('2d'), viewport: scaledVp}).promise;
         thumbs.push(canvas.toDataURL('image/png'));
+        // Exact px size of the rendered thumbnail + the pt-box it was rendered
+        // from (pdf.js renders the page's CropBox), so preview code can map
+        // any pt-space rectangle (e.g. trim+bleed) onto thumbnail pixels.
+        thumbDims.push({ w: canvas.width, h: canvas.height, refBox: pageBoxes[i-1].cropBox });
       }
 
-      docs.push({ fileName: file.name, baseName, bytes: buf, numPages, pageDims, thumbs });
+      docs.push({ fileName: file.name, baseName, bytes: buf, numPages, pageDims, pageBoxes, thumbs, thumbDims });
     }
 
     state.docs = docs;
@@ -1431,6 +1438,158 @@ function renderMarksHtml(sheet, geo, h, scale){
   }).join('');
 }
 
+// Adds crop/gutter/center marks measured from the ACTUAL rendered DOM (not
+// parallel math), so they're always pixel-perfect against whatever the
+// browser really laid out — trimbox edge to trimbox edge, exactly like the
+// real PDF output.
+function addMeasuredMarks(sheetFrameEl, cols, rows, scale){
+  const cropOn = $('cropMarks').checked, gutOn = $('gutterMarks').checked, centerOn = $('centerMarks').checked;
+  if (!cropOn && !gutOn && !centerOn) return;
+  const lenPx = mm2pt(parseFloat($('markLength').value)||0) * scale;
+  const distPx = mm2pt(parseFloat($('markDistance').value)||0) * scale;
+  const thickPx = Math.max(1, mm2pt(parseFloat($('markThickness').value)||0.25) * scale);
+
+  const frameRect = sheetFrameEl.getBoundingClientRect();
+  const marginboxEl = sheetFrameEl.querySelector('.marginbox');
+  const cellgridEl = sheetFrameEl.querySelector('.cellgrid');
+  if (!marginboxEl || !cellgridEl) return;
+  const blockRect = marginboxEl.getBoundingClientRect();
+  const bx = blockRect.left - frameRect.left, by = blockRect.top - frameRect.top;
+  const bw = blockRect.width, bh = blockRect.height;
+  const cells = Array.from(cellgridEl.children);
+
+  const addTick = (x1,y1,x2,y2) => {
+    const dx=x2-x1, dy=y2-y1;
+    const length = Math.sqrt(dx*dx+dy*dy) || 0.5;
+    const angle = Math.atan2(dy,dx)*180/Math.PI;
+    const d = document.createElement('div');
+    d.style.cssText = `position:absolute;left:${x1}px;top:${y1-thickPx/2}px;width:${length}px;height:${thickPx}px;background:var(--signal);transform-origin:0 50%;transform:rotate(${angle}deg);pointer-events:none;`;
+    sheetFrameEl.appendChild(d);
+  };
+
+  if (cropOn){
+    const corners = [
+      {x:bx, y:by, ox:-1, oy:-1}, {x:bx+bw, y:by, ox:1, oy:-1},
+      {x:bx, y:by+bh, ox:-1, oy:1}, {x:bx+bw, y:by+bh, ox:1, oy:1},
+    ];
+    corners.forEach(({x,y,ox,oy})=>{
+      addTick(x+ox*distPx, y, x+ox*(distPx+lenPx), y);
+      addTick(x, y+oy*distPx, x, y+oy*(distPx+lenPx));
+    });
+  }
+  if (centerOn){
+    const midX = bx+bw/2, midY = by+bh/2;
+    addTick(midX, by-distPx, midX, by-distPx-lenPx);
+    addTick(midX, by+bh+distPx, midX, by+bh+distPx+lenPx);
+    addTick(bx-distPx, midY, bx-distPx-lenPx, midY);
+    addTick(bx+bw+distPx, midY, bx+bw+distPx+lenPx, midY);
+  }
+  if (gutOn){
+    for(let c=1;c<cols;c++){
+      const leftCell = cells[c-1], rightCell = cells[c]; // row 0
+      if (!leftCell || !rightCell) continue;
+      const lr = leftCell.getBoundingClientRect(), rr = rightCell.getBoundingClientRect();
+      const leftX = lr.right - frameRect.left, rightX = rr.left - frameRect.left;
+      [by, by+bh].forEach(y=>{
+        const dir = (y===by) ? -1 : 1;
+        addTick(leftX, y+dir*distPx, leftX, y+dir*(distPx+lenPx));
+        addTick(rightX, y+dir*distPx, rightX, y+dir*(distPx+lenPx));
+      });
+    }
+    for(let r=1;r<rows;r++){
+      const topCell = cells[(r-1)*cols], bottomCell = cells[r*cols]; // col 0
+      if (!topCell || !bottomCell) continue;
+      const tr = topCell.getBoundingClientRect(), br = bottomCell.getBoundingClientRect();
+      const topY = tr.bottom - frameRect.top, bottomY = br.top - frameRect.top;
+      [bx, bx+bw].forEach(x=>{
+        const dir = (x===bx) ? -1 : 1;
+        addTick(x+dir*distPx, topY, x+dir*(distPx+lenPx), topY);
+        addTick(x+dir*distPx, bottomY, x+dir*(distPx+lenPx), bottomY);
+      });
+    }
+  }
+}
+
+// Mirrors embedIntoCell's math exactly — scale, bleed-allowance capping on
+// internal vs outer edges, and source-space crop rectangle — so the preview
+// shows the same bleed spilling into gutters (and margin, up to the sheet
+// edge) that the real PDF embed produces. The source thumbnail was rendered
+// from the page's CropBox, so the crop rectangle (trim ± allowed bleed) is
+// remapped onto thumbnail pixel space via background-image crop/scale
+// (an <img> can't do an arbitrary crop; a sized/positioned background can).
+function computeCellBleedHtml(doc, idx, rot, cellW, cellH, gutterH, gutterV, edges, autoscale, preserveAspect, psc){
+  const boxes = doc.pageBoxes && doc.pageBoxes[idx];
+  const td = doc.thumbDims && doc.thumbDims[idx];
+  const thumb = doc.thumbs[idx] || '';
+  if (!boxes || !td) return `<img src="${thumb}">`; // safety fallback
+
+  const trimBox = boxes.trimBox, bleed = boxes.bleed;
+  const swapped = (rot===90 || rot===270);
+  const effTrimW = swapped ? trimBox.height : trimBox.width;
+  const effTrimH = swapped ? trimBox.width  : trimBox.height;
+  let scaleX, scaleY;
+  if (!autoscale){
+    scaleX = scaleY = 1;
+  } else if (preserveAspect){
+    scaleX = scaleY = Math.min(cellW/effTrimW, cellH/effTrimH);
+  } else {
+    scaleX = cellW/effTrimW; scaleY = cellH/effTrimH;
+  }
+
+  const outputBleedFull = rotateBleed(bleed, rot);
+  const halfGutterH = (gutterH/2)/scaleX;
+  const halfGutterV = (gutterV/2)/scaleY;
+  const outAllow = {
+    left:   edges.left   ? outputBleedFull.left   : Math.min(outputBleedFull.left,   halfGutterH),
+    right:  edges.right  ? outputBleedFull.right  : Math.min(outputBleedFull.right,  halfGutterH),
+    top:    edges.top    ? outputBleedFull.top    : Math.min(outputBleedFull.top,    halfGutterV),
+    bottom: edges.bottom ? outputBleedFull.bottom : Math.min(outputBleedFull.bottom, halfGutterV),
+  };
+  const srcAllow = rotateBleed(outAllow, (360-rot)%360);
+
+  // Crop rectangle in the SOURCE page's own pt-space — exactly what pdf-lib embeds.
+  const cropLeftPt = trimBox.x - srcAllow.left;
+  const cropBottomPt = trimBox.y - srcAllow.bottom;
+  const cropRightPt = trimBox.x + trimBox.width + srcAllow.right;
+  const cropTopPt = trimBox.y + trimBox.height + srcAllow.top;
+  const embWidthPt = cropRightPt - cropLeftPt, embHeightPt = cropTopPt - cropBottomPt;
+
+  // Map that crop rect onto the thumbnail's own pixel space (rendered from CropBox).
+  const ref = td.refBox;
+  const thumbScaleX = td.w/ref.width, thumbScaleY = td.h/ref.height;
+  const pxLeft = (cropLeftPt-ref.x)*thumbScaleX;
+  const pxRight = (cropRightPt-ref.x)*thumbScaleX;
+  const pxTop = (ref.y+ref.height-cropTopPt)*thumbScaleY;
+  const pxBottom = (ref.y+ref.height-cropBottomPt)*thumbScaleY;
+  const cropWpx = pxRight-pxLeft, cropHpx = pxBottom-pxTop;
+
+  // Local (pre-rotation, source-oriented) drawn box size, in preview px.
+  const localScaleX = swapped ? scaleY : scaleX;
+  const localScaleY = swapped ? scaleX : scaleY;
+  const localBoxWpx = embWidthPt*localScaleX*psc;
+  const localBoxHpx = embHeightPt*localScaleY*psc;
+
+  const factorX = cropWpx>0 ? localBoxWpx/cropWpx : 1;
+  const factorY = cropHpx>0 ? localBoxHpx/cropHpx : 1;
+  const bgSizeWpx = td.w*factorX, bgSizeHpx = td.h*factorY;
+  const bgPosXpx = -pxLeft*factorX, bgPosYpx = -pxTop*factorY;
+
+  // Output-space (rotation-aware) footprint & position within the cell —
+  // the trim block centered as usual, plus bleed extending outward per edge.
+  const trimDrawWpx = effTrimW*scaleX*psc, trimDrawHpx = effTrimH*scaleY*psc;
+  const cellWpx = cellW*psc, cellHpx = cellH*psc;
+  const trimOriginXpx = (cellWpx-trimDrawWpx)/2, trimOriginYpx = (cellHpx-trimDrawHpx)/2;
+  const extendLeftPx = outAllow.left*scaleX*psc, extendRightPx = outAllow.right*scaleX*psc;
+  const extendTopPx = outAllow.top*scaleY*psc, extendBottomPx = outAllow.bottom*scaleY*psc;
+  const containerLeftPx = trimOriginXpx-extendLeftPx, containerTopPx = trimOriginYpx-extendTopPx;
+  const containerWpx = trimDrawWpx+extendLeftPx+extendRightPx, containerHpx = trimDrawHpx+extendTopPx+extendBottomPx;
+
+  const rotatePart = rot ? `rotate(-${rot}deg)` : '';
+  return `<div style="position:absolute;left:${containerLeftPx}px;top:${containerTopPx}px;width:${containerWpx}px;height:${containerHpx}px;overflow:hidden;">
+    <div style="position:absolute;top:50%;left:50%;width:${localBoxWpx}px;height:${localBoxHpx}px;margin-left:${-localBoxWpx/2}px;margin-top:${-localBoxHpx/2}px;background-image:url('${thumb}');background-repeat:no-repeat;background-size:${bgSizeWpx}px ${bgSizeHpx}px;background-position:${bgPosXpx}px ${bgPosYpx}px;${rotatePart?`transform:${rotatePart};`:''}"></div>
+  </div>`;
+}
+
 function update(){
   const doc = currentDoc();
   if (!doc) return;
@@ -1469,13 +1628,16 @@ function update(){
       : computeStepPreviewGeometry(finalStepDef, finalW, finalH, sheet.cols, sheet.rows);
     const pw = finalW*scale, ph = finalH*scale;
     const rotVal = parseInt($('rotatePage').value)||0;
-    const cellsHtml = sheet.cells.map(idx=>{
+    const autoscaleOn = $('autoscale').checked;
+    const preserveAspectOn = $('preserveAspect').checked || !autoscaleOn;
+    const cellsHtml = sheet.cells.map((idx,j)=>{
       if (idx===null) return `<div class="cell blank"></div>`;
       if (isFinalStepOne){
-        const src = doc.thumbs[idx] || '';
         const cellRot = effectiveRotation(idx, rotVal);
-        const style = cellRot ? ` style="transform:rotate(-${cellRot}deg);"` : '';
-        return `<div class="cell"><img src="${src}"${style}></div>`;
+        const r = Math.floor(j/sheet.cols), c = j%sheet.cols;
+        const edges = {left:c===0, right:c===sheet.cols-1, top:r===0, bottom:r===sheet.rows-1};
+        const inner = computeCellBleedHtml(doc, idx, cellRot, geo.cellW, geo.cellH, geo.gutterH, geo.gutterV, edges, autoscaleOn, preserveAspectOn, scale);
+        return `<div class="cell" style="overflow:visible;">${inner}</div>`;
       }
       // Extra steps impose already-composed sheets, not source pages. When
       // the sheet feeding this step is Step 1's own output, we know exactly
@@ -1497,7 +1659,7 @@ function update(){
       }
       return `<div class="cell" style="font-family:var(--mono);font-size:13px;color:var(--ink-soft);">${idx+1}</div>`;
     }).join('');
-    const marks = renderMarksHtml(sheet, geo, finalH, scale);
+    const marks = '';
     const boxLeft = geo.originX*scale, boxTop = geo.originYTop*scale, boxW = geo.blockW*scale, boxH = geo.blockH*scale;
     return `<div class="sheet-outer">
       <div class="sheet-label"><span>${sheet.tag}</span><span>${pt2mm(finalW).toFixed(1)}&times;${pt2mm(finalH).toFixed(1)}mm</span></div>
@@ -1511,6 +1673,15 @@ function update(){
       </div>
     </div>`;
   }).join('');
+
+  // Marks are added in a second pass, after the sheets are actually in the
+  // DOM, so they're measured from the real rendered grid — guaranteed to
+  // line up exactly with what's shown, trimbox edge to trimbox edge.
+  document.querySelectorAll('#sheetsGrid .sheet-outer').forEach((outerEl, i)=>{
+    const sheet = finalSheets[i];
+    const frameEl = outerEl.querySelector('.sheet-frame');
+    if (sheet && frameEl) addMeasuredMarks(frameEl, sheet.cols, sheet.rows, scale);
+  });
 }
 
 // ---- printer's marks drawing (pdf-lib) ----
@@ -1870,7 +2041,22 @@ $('generateBtn').addEventListener('click', async ()=>{
       }
 
       const outBytes = chainBytes;
-      outputs.push({ name: `${doc.baseName}-imposed.pdf`, bytes: outBytes });
+      // "Up" = pages per sheet side in the FINAL step of the chain (the
+      // actual imposition the downloaded file ends up with), not Step 1 —
+      // if there are extra steps, the last one determines the real result.
+      let finalCols, finalRows;
+      if (extraSteps.length){
+        const lastStep = extraSteps[extraSteps.length-1];
+        if (lastStep.type==='grid'){ finalCols = Math.max(1, lastStep.cols||1); finalRows = Math.max(1, lastStep.rows||1); }
+        else { finalCols = 2; finalRows = 1; } // booklet: 2-up per side
+      } else if (mode==='booklet'){
+        finalCols = 2; finalRows = 1;
+      } else {
+        finalCols = Math.max(1, parseInt($('cols').value)||1);
+        finalRows = Math.max(1, parseInt($('rows').value)||1);
+      }
+      const upCount = finalCols*finalRows;
+      outputs.push({ name: `${doc.baseName} - impo ${upCount}up.pdf`, bytes: outBytes });
     }
 
     // Trigger a separate download per file (staggered slightly since browsers
