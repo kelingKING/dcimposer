@@ -366,100 +366,6 @@
 
       <div id="extraStepsContainer"></div>
 
-      <div class="section-block">
-        <div class="section-label">Overlay image</div>
-        <div class="dropzone" id="overlayDropzone" style="padding:16px;">
-          <strong>Choose overlay file</strong>
-          <p>PDF, PNG, or JPG — stamped onto the imposed sheets</p>
-          <input type="file" id="overlayInput" accept="application/pdf,image/png,image/jpeg">
-        </div>
-        <div id="overlayChip" class="file-chip" style="display:none;margin-top:8px;"></div>
-
-        <label class="checkline" style="margin-top:10px;"><input type="checkbox" id="overlayRepeat" checked> Repeat on every matching page</label>
-        <div class="row2">
-          <div class="field">
-            <label for="overlayBlend">Blend mode</label>
-            <select id="overlayBlend">
-              <option value="Normal">normal</option>
-              <option value="Multiply" selected>multiply</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="overlayOpacity">Opacity (%)</label>
-            <input type="number" id="overlayOpacity" min="0" max="100" value="100">
-          </div>
-        </div>
-        <div class="field">
-          <label for="overlayPages">Pages</label>
-          <input type="text" id="overlayPages" value="all" placeholder="all, or e.g. 1,3,5-8">
-        </div>
-        <div class="subgrid-title">Location</div>
-        <div class="anchor-grid" id="overlayAnchor" data-row="1" data-col="1"></div>
-        <div class="field" style="margin-top:10px;max-width:140px;">
-          <label for="overlayPadding">Padding (mm)</label>
-          <input type="number" id="overlayPadding" min="0" value="5">
-        </div>
-      </div>
-
-      <div class="section-block">
-        <div class="section-label">Add text</div>
-        <div class="field">
-          <label for="textContent">Text</label>
-          <input type="text" id="textContent" placeholder="e.g. CONFIDENTIAL">
-        </div>
-        <div class="row2">
-          <div class="field"><label for="textSize">Size (pt)</label><input type="number" id="textSize" value="24" min="1"></div>
-          <div class="field">
-            <label for="textColorMode">Color mode</label>
-            <select id="textColorMode">
-              <option value="rgb" selected>RGB</option>
-              <option value="cmyk">CMYK</option>
-            </select>
-          </div>
-        </div>
-        <div class="field" id="textColorRgbField">
-          <label for="textColor">Color</label>
-          <input type="color" id="textColor" value="#bf3b2a">
-        </div>
-        <div class="row4" id="textColorCmykField" style="display:none;">
-          <div class="field"><label for="textC">C</label><input type="number" id="textC" min="0" max="100" value="0"></div>
-          <div class="field"><label for="textM">M</label><input type="number" id="textM" min="0" max="100" value="70"></div>
-          <div class="field"><label for="textY">Y</label><input type="number" id="textY" min="0" max="100" value="65"></div>
-          <div class="field"><label for="textK">K</label><input type="number" id="textK" min="0" max="100" value="10"></div>
-        </div>
-        <div class="row2">
-          <div class="field"><label for="textOpacity">Opacity (%)</label><input type="number" id="textOpacity" min="0" max="100" value="60"></div>
-        </div>
-        <div class="field">
-          <label for="textPages">Pages</label>
-          <input type="text" id="textPages" value="all" placeholder="all, or e.g. 1,3,5-8">
-        </div>
-
-        <div class="row2" style="align-items:start;">
-          <div>
-            <div class="subgrid-title">Location</div>
-            <div class="anchor-grid" id="textAnchor" data-row="1" data-col="1"></div>
-          </div>
-          <div>
-            <div class="subgrid-title">Rotate</div>
-            <div class="rotate-picker" id="textRotatePicker" data-rotate="0">
-              <label class="rotate-option"><input type="radio" name="textRotateOpt" value="0" checked><span class="rtext r0">Text</span></label>
-              <label class="rotate-option"><input type="radio" name="textRotateOpt" value="90"><span class="rtext r90">Text</span></label>
-              <label class="rotate-option"><input type="radio" name="textRotateOpt" value="180"><span class="rtext r180">Text</span></label>
-              <label class="rotate-option"><input type="radio" name="textRotateOpt" value="270"><span class="rtext r270">Text</span></label>
-            </div>
-          </div>
-        </div>
-
-        <label class="checkline" style="margin-top:10px;"><input type="checkbox" id="textAlternateSides"> Alternate sides for odd and even pages</label>
-
-        <div class="subgrid-title" style="margin-top:12px;">Margins (mm)</div>
-        <div class="row2">
-          <div class="field"><label for="textMarginLeft">Left</label><input type="number" id="textMarginLeft" min="0" value="5"></div>
-          <div class="field"><label for="textMarginTop">Top</label><input type="number" id="textMarginTop" min="0" value="5"></div>
-        </div>
-      </div>
-
       <div id="summary" class="summary" style="display:none;"></div>
       <button class="generate-btn" id="generateBtn" disabled>Load a PDF first</button>
       <div id="status" class="status"></div>
@@ -713,20 +619,25 @@ function defaultBookletStep(){
     paperSize:'Letter', customW:210, customH:297, landscape:true,
     marginL:8, marginT:8, marginR:8, marginB:8, gutterH:4, gutterV:4, rotate:0};
 }
+function defaultOverlayStep(){
+  return {type:'overlay', overlayState:null, overlayRepeat:true, overlayBlend:'Multiply', overlayOpacity:100,
+    overlayPages:'all', overlayAnchorRow:1, overlayAnchorCol:1, overlayPadding:5};
+}
+function defaultTextStep(){
+  return {type:'text', textContent:'', textSize:24, textColorMode:'rgb', textColor:'#bf3b2a',
+    textC:0, textM:70, textY:65, textK:10, textOpacity:60, textPages:'all',
+    textAnchorRow:1, textAnchorCol:1, textRotate:0, textAlternateSides:false,
+    textMarginLeft:5, textMarginTop:5};
+}
+function newStepOfType(type){
+  if (type==='booklet') return defaultBookletStep();
+  if (type==='overlay') return defaultOverlayStep();
+  if (type==='text') return defaultTextStep();
+  return defaultGridStep();
+}
 
-function renderExtraSteps(){
-  const container = $('extraStepsContainer');
-  container.innerHTML = extraSteps.map((step, i) => `
-    <div class="step-card" data-idx="${i}">
-      <div class="step-card-head">
-        <span class="step-badge">Step ${i+2}</span>
-        <button class="x-remove" data-remove-step="${i}" title="Remove this step">&times;</button>
-      </div>
-      <div class="step-type-seg" data-idx="${i}">
-        <button data-type="grid" class="${step.type==='grid'?'active':''}">Grid</button>
-        <button data-type="booklet" class="${step.type==='booklet'?'active':''}">Booklet</button>
-      </div>
-
+function impositionFieldsHtml(step, i){
+  return `
       <div class="subgrid-title">Sheet size</div>
       <div class="row2">
         <div class="field">
@@ -803,7 +714,129 @@ function renderExtraSteps(){
       <div class="row2">
         <div class="field"><label>Gutter H</label><input type="number" data-field="gutterH" data-numtype="float" data-idx="${i}" value="${step.gutterH}"></div>
         <div class="field"><label>Gutter V</label><input type="number" data-field="gutterV" data-numtype="float" data-idx="${i}" value="${step.gutterV}"></div>
+      </div>`;
+}
+
+function overlayFieldsHtml(step, i){
+  const ov = step.overlayState;
+  return `
+      <div class="subgrid-title">Overlay image</div>
+      <div class="dropzone" data-overlay-dropzone data-idx="${i}" style="padding:16px;">
+        <strong>Choose overlay file</strong>
+        <p>PDF, PNG, or JPG — stamped onto this step's pages</p>
+        <input type="file" data-overlay-input data-idx="${i}" accept="application/pdf,image/png,image/jpeg">
       </div>
+      ${ov ? `<div class="file-chip" style="display:flex;margin-top:8px;">
+        <span class="name" style="display:flex;align-items:center;gap:8px;">${ov.kind==='pdf'
+          ? `<span style="display:inline-flex;align-items:center;justify-content:center;height:28px;width:22px;border:1px solid var(--line);font-family:var(--mono);font-size:9px;color:var(--ink-soft);">PDF</span>`
+          : `<img src="${ov.previewUrl||''}" style="height:28px;width:auto;border:1px solid var(--line);">`}${escapeHtml(ov.name)}</span>
+        <button class="x-remove" data-remove-overlay="${i}">&times;</button>
+      </div>` : ''}
+
+      <label class="checkline" style="margin-top:10px;"><input type="checkbox" data-field="overlayRepeat" data-idx="${i}" ${step.overlayRepeat?'checked':''}> Repeat on every matching page</label>
+      <div class="row2">
+        <div class="field">
+          <label>Blend mode</label>
+          <select data-field="overlayBlend" data-idx="${i}">
+            <option value="Normal" ${step.overlayBlend==='Normal'?'selected':''}>normal</option>
+            <option value="Multiply" ${step.overlayBlend==='Multiply'?'selected':''}>multiply</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Opacity (%)</label>
+          <input type="number" data-field="overlayOpacity" data-numtype="float" data-idx="${i}" min="0" max="100" value="${step.overlayOpacity}">
+        </div>
+      </div>
+      <div class="field">
+        <label>Pages</label>
+        <input type="text" data-field="overlayPages" data-idx="${i}" value="${escapeHtml(step.overlayPages)}" placeholder="all, or e.g. 1,3,5-8">
+      </div>
+      <div class="subgrid-title">Location</div>
+      <div class="anchor-grid" data-idx="${i}" data-rowfield="overlayAnchorRow" data-colfield="overlayAnchorCol">${anchorGridHtml(step.overlayAnchorRow, step.overlayAnchorCol)}</div>
+      <div class="field" style="margin-top:10px;max-width:140px;">
+        <label>Padding (mm)</label>
+        <input type="number" data-field="overlayPadding" data-numtype="float" data-idx="${i}" min="0" value="${step.overlayPadding}">
+      </div>`;
+}
+
+function textFieldsHtml(step, i){
+  const isCmyk = step.textColorMode==='cmyk';
+  return `
+      <div class="subgrid-title">Add text</div>
+      <div class="field">
+        <label>Text</label>
+        <input type="text" data-field="textContent" data-idx="${i}" value="${escapeHtml(step.textContent)}" placeholder="e.g. CONFIDENTIAL">
+      </div>
+      <div class="row2">
+        <div class="field"><label>Size (pt)</label><input type="number" data-field="textSize" data-numtype="float" data-idx="${i}" value="${step.textSize}" min="1"></div>
+        <div class="field">
+          <label>Color mode</label>
+          <select data-field="textColorMode" data-idx="${i}">
+            <option value="rgb" ${!isCmyk?'selected':''}>RGB</option>
+            <option value="cmyk" ${isCmyk?'selected':''}>CMYK</option>
+          </select>
+        </div>
+      </div>
+      ${!isCmyk ? `
+      <div class="field">
+        <label>Color</label>
+        <input type="color" data-field="textColor" data-idx="${i}" value="${step.textColor}">
+      </div>` : `
+      <div class="row4">
+        <div class="field"><label>C</label><input type="number" data-field="textC" data-numtype="float" data-idx="${i}" min="0" max="100" value="${step.textC}"></div>
+        <div class="field"><label>M</label><input type="number" data-field="textM" data-numtype="float" data-idx="${i}" min="0" max="100" value="${step.textM}"></div>
+        <div class="field"><label>Y</label><input type="number" data-field="textY" data-numtype="float" data-idx="${i}" min="0" max="100" value="${step.textY}"></div>
+        <div class="field"><label>K</label><input type="number" data-field="textK" data-numtype="float" data-idx="${i}" min="0" max="100" value="${step.textK}"></div>
+      </div>`}
+      <div class="row2">
+        <div class="field"><label>Opacity (%)</label><input type="number" data-field="textOpacity" data-numtype="float" data-idx="${i}" min="0" max="100" value="${step.textOpacity}"></div>
+      </div>
+      <div class="field">
+        <label>Pages</label>
+        <input type="text" data-field="textPages" data-idx="${i}" value="${escapeHtml(step.textPages)}" placeholder="all, or e.g. 1,3,5-8">
+      </div>
+
+      <div class="row2" style="align-items:start;">
+        <div>
+          <div class="subgrid-title">Location</div>
+          <div class="anchor-grid" data-idx="${i}" data-rowfield="textAnchorRow" data-colfield="textAnchorCol">${anchorGridHtml(step.textAnchorRow, step.textAnchorCol)}</div>
+        </div>
+        <div>
+          <div class="subgrid-title">Rotate</div>
+          <div class="rotate-picker" data-idx="${i}" data-rotate-field="textRotate">
+            <label class="rotate-option"><input type="radio" name="textRotateOpt_${i}" value="0" ${(''+step.textRotate)==='0'?'checked':''}><span class="rtext r0">Text</span></label>
+            <label class="rotate-option"><input type="radio" name="textRotateOpt_${i}" value="90" ${(''+step.textRotate)==='90'?'checked':''}><span class="rtext r90">Text</span></label>
+            <label class="rotate-option"><input type="radio" name="textRotateOpt_${i}" value="180" ${(''+step.textRotate)==='180'?'checked':''}><span class="rtext r180">Text</span></label>
+            <label class="rotate-option"><input type="radio" name="textRotateOpt_${i}" value="270" ${(''+step.textRotate)==='270'?'checked':''}><span class="rtext r270">Text</span></label>
+          </div>
+        </div>
+      </div>
+
+      <label class="checkline" style="margin-top:10px;"><input type="checkbox" data-field="textAlternateSides" data-idx="${i}" ${step.textAlternateSides?'checked':''}> Alternate sides for odd and even pages</label>
+
+      <div class="subgrid-title" style="margin-top:12px;">Margins (mm)</div>
+      <div class="row2">
+        <div class="field"><label>Left</label><input type="number" data-field="textMarginLeft" data-numtype="float" data-idx="${i}" min="0" value="${step.textMarginLeft}"></div>
+        <div class="field"><label>Top</label><input type="number" data-field="textMarginTop" data-numtype="float" data-idx="${i}" min="0" value="${step.textMarginTop}"></div>
+      </div>`;
+}
+
+function renderExtraSteps(){
+  const container = $('extraStepsContainer');
+  container.innerHTML = extraSteps.map((step, i) => `
+    <div class="step-card" data-idx="${i}">
+      <div class="step-card-head">
+        <span class="step-badge">Step ${i+2}</span>
+        <button class="x-remove" data-remove-step="${i}" title="Remove this step">&times;</button>
+      </div>
+      <div class="step-type-seg" data-idx="${i}">
+        <button data-type="grid" class="${step.type==='grid'?'active':''}">Grid</button>
+        <button data-type="booklet" class="${step.type==='booklet'?'active':''}">Booklet</button>
+        <button data-type="overlay" class="${step.type==='overlay'?'active':''}">Overlay</button>
+        <button data-type="text" class="${step.type==='text'?'active':''}">Text</button>
+      </div>
+
+      ${step.type==='overlay' ? overlayFieldsHtml(step, i) : step.type==='text' ? textFieldsHtml(step, i) : impositionFieldsHtml(step, i)}
 
       <button type="button" class="add-step-btn" data-add-after="${i}">+ Add Step</button>
     </div>
@@ -816,7 +849,7 @@ function renderExtraSteps(){
     seg.querySelectorAll('button').forEach(b=>{
       b.addEventListener('click', ()=>{
         const i = parseInt(seg.dataset.idx);
-        extraSteps[i] = b.dataset.type==='grid' ? defaultGridStep() : defaultBookletStep();
+        extraSteps[i] = newStepOfType(b.dataset.type);
         renderExtraSteps();
         update();
       });
@@ -833,7 +866,59 @@ function renderExtraSteps(){
         else { extraSteps[i][field] = Math.max(1, parseInt(inp.value)||1); }
       }
       else extraSteps[i][field] = inp.value;
-      if (field==='arrangement' || field==='paperSize') renderExtraSteps();
+      if (field==='arrangement' || field==='paperSize' || field==='textColorMode') renderExtraSteps();
+      update();
+    });
+  });
+  // 9-point anchor grid, per step (used by both overlay and text steps)
+  container.querySelectorAll('.anchor-grid[data-rowfield]').forEach(grid=>{
+    const i = parseInt(grid.dataset.idx);
+    const rowField = grid.dataset.rowfield, colField = grid.dataset.colfield;
+    grid.querySelectorAll('.anchor-cell').forEach(cell=>{
+      cell.addEventListener('click', ()=>{
+        grid.querySelectorAll('.anchor-cell').forEach(c=>c.classList.remove('active'));
+        cell.classList.add('active');
+        extraSteps[i][rowField] = parseInt(cell.dataset.row);
+        extraSteps[i][colField] = parseInt(cell.dataset.col);
+        update();
+      });
+    });
+  });
+  // Text rotate picker, per step
+  container.querySelectorAll('.rotate-picker[data-rotate-field]').forEach(picker=>{
+    const i = parseInt(picker.dataset.idx);
+    const field = picker.dataset.rotateField;
+    picker.querySelectorAll('input[type="radio"]').forEach(radio=>{
+      radio.addEventListener('change', ()=>{ extraSteps[i][field] = parseInt(radio.value)||0; update(); });
+    });
+  });
+  // Overlay file upload, per step
+  container.querySelectorAll('[data-overlay-dropzone]').forEach(dz=>{
+    const i = dz.dataset.idx;
+    dz.addEventListener('click', ()=> container.querySelector(`[data-overlay-input][data-idx="${i}"]`).click());
+  });
+  container.querySelectorAll('[data-overlay-input]').forEach(inp=>{
+    inp.addEventListener('change', async (e)=>{
+      const i = parseInt(inp.dataset.idx);
+      const f = e.target.files[0];
+      if (!f) return;
+      const buf = await f.arrayBuffer();
+      const lower = f.name.toLowerCase();
+      const isPdf = f.type==='application/pdf' || lower.endsWith('.pdf');
+      const isPng = f.type==='image/png' || lower.endsWith('.png');
+      const kind = isPdf ? 'pdf' : (isPng ? 'png' : 'jpg');
+      const previewUrl = kind==='pdf' ? '' : URL.createObjectURL(new Blob([buf], {type: isPng?'image/png':'image/jpeg'}));
+      extraSteps[i].overlayState = { bytes: buf, kind, name: f.name, previewUrl };
+      renderExtraSteps();
+      update();
+    });
+  });
+  container.querySelectorAll('[data-remove-overlay]').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{
+      ev.stopPropagation();
+      const i = parseInt(btn.dataset.removeOverlay);
+      extraSteps[i].overlayState = null;
+      renderExtraSteps();
       update();
     });
   });
@@ -908,58 +993,6 @@ function anchorGridHtml(defaultRow, defaultCol){
   }
   return html;
 }
-function setupAnchorGrid(containerId){
-  const el = $(containerId);
-  el.innerHTML = anchorGridHtml(parseInt(el.dataset.row), parseInt(el.dataset.col));
-  el.querySelectorAll('.anchor-cell').forEach(cell=>{
-    cell.addEventListener('click', ()=>{
-      el.querySelectorAll('.anchor-cell').forEach(c=>c.classList.remove('active'));
-      cell.classList.add('active');
-      el.dataset.row = cell.dataset.row;
-      el.dataset.col = cell.dataset.col;
-    });
-  });
-}
-setupAnchorGrid('overlayAnchor');
-setupAnchorGrid('textAnchor');
-
-$('textRotatePicker').querySelectorAll('input[name="textRotateOpt"]').forEach(radio=>{
-  radio.addEventListener('change', ()=>{ $('textRotatePicker').dataset.rotate = radio.value; });
-});
-
-function updateTextColorModeVisibility(){
-  const isCmyk = $('textColorMode').value === 'cmyk';
-  $('textColorRgbField').style.display = isCmyk ? 'none' : 'block';
-  $('textColorCmykField').style.display = isCmyk ? 'grid' : 'none';
-}
-$('textColorMode').addEventListener('change', updateTextColorModeVisibility);
-updateTextColorModeVisibility();
-
-// ---- overlay image file ----
-let overlayState = null; // {bytes, kind:'pdf'|'png'|'jpg', name}
-$('overlayDropzone').addEventListener('click', ()=> $('overlayInput').click());
-$('overlayInput').addEventListener('change', async (e)=>{
-  const f = e.target.files[0];
-  if (!f) return;
-  const buf = await f.arrayBuffer();
-  const lower = f.name.toLowerCase();
-  const isPdf = f.type==='application/pdf' || lower.endsWith('.pdf');
-  const isPng = f.type==='image/png' || lower.endsWith('.png');
-  const kind = isPdf ? 'pdf' : (isPng ? 'png' : 'jpg');
-  overlayState = { bytes: buf, kind, name: f.name };
-
-  const chip = $('overlayChip');
-  chip.style.display = 'flex';
-  let preview;
-  if (kind === 'pdf'){
-    preview = `<span style="display:inline-flex;align-items:center;justify-content:center;height:28px;width:22px;border:1px solid var(--line);font-family:var(--mono);font-size:9px;color:var(--ink-soft);">PDF</span>`;
-  } else {
-    const blobUrl = URL.createObjectURL(new Blob([buf], {type: isPng?'image/png':'image/jpeg'}));
-    preview = `<img src="${blobUrl}" style="height:28px;width:auto;border:1px solid var(--line);">`;
-  }
-  chip.innerHTML = `<span class="name" style="display:flex;align-items:center;gap:8px;">${preview}${escapeHtml(f.name)}</span><button class="x-remove" id="overlayRemove">&times;</button>`;
-  $('overlayRemove').addEventListener('click', (ev)=>{ ev.stopPropagation(); overlayState=null; chip.style.display='none'; chip.innerHTML=''; });
-});
 
 // "all" or "1,3,5-8" -> Set of page numbers, or null meaning "all pages"
 function parsePagesSpec(spec){
@@ -1179,6 +1212,99 @@ function setClampedTrimBox(page, x, y, width, height, w, h){
 }
 
 function isRtl(){ return mode==='booklet' ? $('rtlBooklet').checked : $('rtl').checked; }
+
+// Overlay-image step: stamps an uploaded PDF/PNG/JPG onto matching pages of
+// whatever the chain has produced so far. Doesn't add/remove/resize pages —
+// mutates prevDoc's own pages directly and returns it.
+async function applyOverlayStep(prevDoc, stepDef){
+  const pages = prevDoc.getPages();
+  if (!stepDef.overlayState || !pages.length) return prevDoc;
+
+  let overlayEmbed = null, overlayIsPdf = false;
+  if (stepDef.overlayState.kind === 'pdf'){
+    const overlayPdfDoc = await PDFLib.PDFDocument.load(stepDef.overlayState.bytes.slice(0));
+    const overlaySrcPage = overlayPdfDoc.getPages()[0];
+    const obox = getBoxes(overlaySrcPage).trimBox;
+    overlayEmbed = await prevDoc.embedPage(overlaySrcPage, {
+      left: obox.x, bottom: obox.y, right: obox.x+obox.width, top: obox.y+obox.height
+    });
+    overlayIsPdf = true;
+  } else {
+    overlayEmbed = stepDef.overlayState.kind==='png'
+      ? await prevDoc.embedPng(stepDef.overlayState.bytes.slice(0))
+      : await prevDoc.embedJpg(stepDef.overlayState.bytes.slice(0));
+  }
+
+  const pagesSpec = parsePagesSpec(stepDef.overlayPages);
+  const paddingPt = mm2pt(parseFloat(stepDef.overlayPadding)||0);
+  const opacity = Math.max(0, Math.min(100, parseFloat(stepDef.overlayOpacity)||100))/100;
+  const repeat = stepDef.overlayRepeat !== false;
+
+  for(let i=0;i<pages.length;i++){
+    const pageNum = i+1;
+    const wantsThisPage = repeat ? pageMatches(pagesSpec, pageNum) : (pageNum===1 && pageMatches(pagesSpec, pageNum));
+    if (!wantsThisPage) continue;
+    const page = pages[i];
+    const {width:w, height:h} = page.getSize();
+    const ow = overlayEmbed.width, oh = overlayEmbed.height;
+    const {x:ox, y:oy} = anchorPosition(stepDef.overlayAnchorRow, stepDef.overlayAnchorCol, ow, oh, w, h, paddingPt);
+    const gsName = ensureExtGState(page, {ca: opacity, BM: stepDef.overlayBlend||'Multiply'});
+    if (gsName){
+      page.pushOperators(PDFLib.pushGraphicsState(), PDFLib.PDFOperator.of('gs', [PDFLib.PDFName.of(gsName)]));
+      if (overlayIsPdf) page.drawPage(overlayEmbed, {x:ox, y:oy, width:ow, height:oh});
+      else page.drawImage(overlayEmbed, {x:ox, y:oy, width:ow, height:oh});
+      page.pushOperators(PDFLib.popGraphicsState());
+    } else if (overlayIsPdf){
+      page.drawPage(overlayEmbed, {x:ox, y:oy, width:ow, height:oh, opacity});
+    } else {
+      page.drawImage(overlayEmbed, {x:ox, y:oy, width:ow, height:oh, opacity});
+    }
+  }
+  return prevDoc;
+}
+
+// Add-text step: stamps a text string onto matching pages. Same
+// mutate-in-place approach as applyOverlayStep.
+async function applyTextStep(prevDoc, stepDef){
+  const pages = prevDoc.getPages();
+  const content = stepDef.textContent || '';
+  if (!content.trim() || !pages.length) return prevDoc;
+
+  const font = await prevDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+  const pagesSpec = parsePagesSpec(stepDef.textPages);
+  const marginLeftPt = mm2pt(parseFloat(stepDef.textMarginLeft)||0);
+  const marginTopPt = mm2pt(parseFloat(stepDef.textMarginTop)||0);
+  const size = parseFloat(stepDef.textSize)||24;
+  const opacity = Math.max(0, Math.min(100, parseFloat(stepDef.textOpacity)||100))/100;
+  const rotateDeg = parseInt(stepDef.textRotate)||0;
+  const color = stepDef.textColorMode === 'cmyk'
+    ? PDFLib.cmyk(
+        Math.max(0,Math.min(100,parseFloat(stepDef.textC)||0))/100,
+        Math.max(0,Math.min(100,parseFloat(stepDef.textM)||0))/100,
+        Math.max(0,Math.min(100,parseFloat(stepDef.textY)||0))/100,
+        Math.max(0,Math.min(100,parseFloat(stepDef.textK)||0))/100
+      )
+    : hexToRgb01(stepDef.textColor||'#bf3b2a');
+  const tw = font.widthOfTextAtSize(content, size);
+  const th = font.heightAtSize(size);
+
+  for(let i=0;i<pages.length;i++){
+    const pageNum = i+1;
+    if (!pageMatches(pagesSpec, pageNum)) continue;
+    const page = pages[i];
+    const {width:w, height:h} = page.getSize();
+    // Alternate sides: even pages get their column mirrored (left<->right),
+    // so facing pages place the text symmetrically (like running headers).
+    const isEven = pageNum % 2 === 0;
+    const effectiveCol = (stepDef.textAlternateSides && isEven) ? (2 - stepDef.textAnchorCol) : stepDef.textAnchorCol;
+    const {x:tx, y:ty} = anchorPosition(stepDef.textAnchorRow, effectiveCol, tw, th, w, h, marginLeftPt, marginTopPt);
+    page.drawText(content, {
+      x: tx, y: ty, size, font, color, opacity, rotate: PDFLib.degrees(rotateDeg)
+    });
+  }
+  return prevDoc;
+}
+
 function reverseRows(cells, rows, cols){
   const out = new Array(cells.length);
   for(let r=0;r<rows;r++) for(let c=0;c<cols;c++) out[r*cols+c] = cells[r*cols + (cols-1-c)];
@@ -1604,6 +1730,11 @@ function update(){
   let finalSheets = layout, finalW = w, finalH = h, finalStepNum = 1, finalStepDef = null;
   let finalInputSheets = null, finalInputIsStep1 = false;
   extraSteps.forEach((step, i)=>{
+    if (step.type==='overlay' || step.type==='text'){
+      const label = step.type==='overlay' ? 'Overlay image' : 'Add text';
+      summaryHtml += `<br><span class="n">${chainCount}</span> pages &rarr; ${label} stamped (Step ${i+2})`;
+      return;
+    }
     const sheets = step.type==='grid' ? buildGridSheets(chainCount, step) : buildBookletSheets(chainCount, step);
     const dims = getStepPaperDims(step);
     summaryHtml += `<br><span class="n">${chainCount}</span> in &rarr; <span class="n">${sheets.length}</span> output sheet${sheets.length!==1?'s':''} (Step ${i+2}, ${step.type}) · ${pt2mm(dims.w).toFixed(1)}&times;${pt2mm(dims.h).toFixed(1)}mm`;
@@ -1836,32 +1967,6 @@ $('generateBtn').addEventListener('click', async ()=>{
   const autoscale = $('autoscale').checked;
   const baseRot = parseInt($('rotatePage').value) || 0; // 0/90/180/270, CCW
 
-  // Overlay image / text settings (read once, applied per matching output page)
-  const overlayPagesSpec = parsePagesSpec($('overlayPages').value);
-  const overlayRepeat = $('overlayRepeat').checked;
-  const overlayAnchorRow = parseInt($('overlayAnchor').dataset.row), overlayAnchorCol = parseInt($('overlayAnchor').dataset.col);
-  const overlayPaddingPt = mm2pt(parseFloat($('overlayPadding').value)||0);
-  const overlayOpacity = Math.max(0, Math.min(100, parseFloat($('overlayOpacity').value)||100))/100;
-  const overlayBlend = $('overlayBlend').value;
-
-  const textContent = $('textContent').value;
-  const textPagesSpec = parsePagesSpec($('textPages').value);
-  const textAnchorRow = parseInt($('textAnchor').dataset.row), textAnchorCol = parseInt($('textAnchor').dataset.col);
-  const textMarginLeftPt = mm2pt(parseFloat($('textMarginLeft').value)||0);
-  const textMarginTopPt = mm2pt(parseFloat($('textMarginTop').value)||0);
-  const textAlternateSides = $('textAlternateSides').checked;
-  const textSize = parseFloat($('textSize').value)||24;
-  const textOpacity = Math.max(0, Math.min(100, parseFloat($('textOpacity').value)||100))/100;
-  const textRotateDeg = parseInt($('textRotatePicker').dataset.rotate) || 0;
-  const textColor = $('textColorMode').value === 'cmyk'
-    ? PDFLib.cmyk(
-        Math.max(0,Math.min(100,parseFloat($('textC').value)||0))/100,
-        Math.max(0,Math.min(100,parseFloat($('textM').value)||0))/100,
-        Math.max(0,Math.min(100,parseFloat($('textY').value)||0))/100,
-        Math.max(0,Math.min(100,parseFloat($('textK').value)||0))/100
-      )
-    : hexToRgb01($('textColor').value);
-
   try{
     const outputs = []; // {name, bytes}
 
@@ -1879,31 +1984,8 @@ $('generateBtn').addEventListener('click', async ()=>{
       const embedCache = {};
       const getBoxesCached = (idx) => boxCache[idx] || (boxCache[idx] = getBoxes(srcPages[idx]));
 
-      let overlayEmbed = null, overlayIsPdf = false;
-      if (overlayState){
-        if (overlayState.kind === 'pdf'){
-          const overlayPdfDoc = await PDFLib.PDFDocument.load(overlayState.bytes.slice(0));
-          const overlaySrcPage = overlayPdfDoc.getPages()[0];
-          const obox = getBoxes(overlaySrcPage).trimBox;
-          overlayEmbed = await outDoc.embedPage(overlaySrcPage, {
-            left: obox.x, bottom: obox.y, right: obox.x+obox.width, top: obox.y+obox.height
-          });
-          overlayIsPdf = true;
-        } else {
-          overlayEmbed = overlayState.kind==='png'
-            ? await outDoc.embedPng(overlayState.bytes.slice(0))
-            : await outDoc.embedJpg(overlayState.bytes.slice(0));
-        }
-      }
-      let textFont = null;
-      if (textContent && textContent.trim()){
-        textFont = await outDoc.embedFont(PDFLib.StandardFonts.Helvetica);
-      }
-      let outputPageNum = 0;
-
       for(const sheet of layout){
         const page = outDoc.addPage([w,h]);
-        outputPageNum++;
         const geo = computeGeometry(sheet, w, h, getEffectivePageDims(doc));
         const {cellW, cellH, gutterH, gutterV, originX, originYTop} = geo;
         const {rows, cols, cells} = sheet;
@@ -1992,70 +2074,28 @@ $('generateBtn').addEventListener('click', async ()=>{
         // is still captured if this result gets fed into a further chained step.
         setClampedTrimBox(page, geo.originX, h-geo.originYTop-geo.blockH, geo.blockW, geo.blockH, w, h);
         try{ page.setBleedBox(0, 0, w, h); }catch(e){}
-
-        // ---- Overlay image ----
-        if (overlayEmbed){
-          const wantsThisPage = overlayRepeat ? pageMatches(overlayPagesSpec, outputPageNum) : (outputPageNum===1 && pageMatches(overlayPagesSpec, outputPageNum));
-          if (wantsThisPage){
-            // Actual size: 1 PDF point = 1 point of the overlay's own TrimBox
-            // (for a PDF overlay) or 1 pixel (for a raster overlay) — no
-            // auto-scaling. Position is still anchored relative to this
-            // sheet's real dimensions (w, h).
-            const ow = overlayEmbed.width, oh = overlayEmbed.height;
-            const {x:ox, y:oy} = anchorPosition(overlayAnchorRow, overlayAnchorCol, ow, oh, w, h, overlayPaddingPt);
-            const gsName = ensureExtGState(page, {ca: overlayOpacity, BM: overlayBlend});
-            if (gsName){
-              page.pushOperators(PDFLib.pushGraphicsState(), PDFLib.PDFOperator.of('gs', [PDFLib.PDFName.of(gsName)]));
-              if (overlayIsPdf) page.drawPage(overlayEmbed, {x:ox, y:oy, width:ow, height:oh});
-              else page.drawImage(overlayEmbed, {x:ox, y:oy, width:ow, height:oh});
-              page.pushOperators(PDFLib.popGraphicsState());
-            } else if (overlayIsPdf){
-              page.drawPage(overlayEmbed, {x:ox, y:oy, width:ow, height:oh, opacity:overlayOpacity});
-            } else {
-              page.drawImage(overlayEmbed, {x:ox, y:oy, width:ow, height:oh, opacity:overlayOpacity});
-            }
-          }
-        }
-
-        // ---- Text overlay ----
-        if (textFont && textContent.trim() && pageMatches(textPagesSpec, outputPageNum)){
-          const tw = textFont.widthOfTextAtSize(textContent, textSize);
-          const th = textFont.heightAtSize(textSize);
-          // Alternate sides: even pages get their column mirrored (left<->right),
-          // so facing pages place the text symmetrically (like running headers).
-          const isEven = outputPageNum % 2 === 0;
-          const effectiveCol = (textAlternateSides && isEven) ? (2 - textAnchorCol) : textAnchorCol;
-          const {x:tx, y:ty} = anchorPosition(textAnchorRow, effectiveCol, tw, th, w, h, textMarginLeftPt, textMarginTopPt);
-          page.drawText(textContent, {
-            x: tx, y: ty, size: textSize, font: textFont, color: textColor,
-            opacity: textOpacity, rotate: PDFLib.degrees(textRotateDeg)
-          });
-        }
       }
 
       let chainBytes = await outDoc.save();
       for (const stepDef of extraSteps){
         const stepInDoc = await PDFLib.PDFDocument.load(chainBytes);
-        const stepOutDoc = await imposeExtraStep(stepInDoc, stepDef);
+        let stepOutDoc;
+        if (stepDef.type==='overlay') stepOutDoc = await applyOverlayStep(stepInDoc, stepDef);
+        else if (stepDef.type==='text') stepOutDoc = await applyTextStep(stepInDoc, stepDef);
+        else stepOutDoc = await imposeExtraStep(stepInDoc, stepDef);
         chainBytes = await stepOutDoc.save();
       }
 
       const outBytes = chainBytes;
-      // "Up" = pages per sheet side in the FINAL step of the chain (the
-      // actual imposition the downloaded file ends up with), not Step 1 —
-      // if there are extra steps, the last one determines the real result.
-      let finalCols, finalRows;
-      if (extraSteps.length){
-        const lastStep = extraSteps[extraSteps.length-1];
-        if (lastStep.type==='grid'){ finalCols = Math.max(1, lastStep.cols||1); finalRows = Math.max(1, lastStep.rows||1); }
-        else { finalCols = 2; finalRows = 1; } // booklet: 2-up per side
-      } else if (mode==='booklet'){
-        finalCols = 2; finalRows = 1;
-      } else {
-        finalCols = Math.max(1, parseInt($('cols').value)||1);
-        finalRows = Math.max(1, parseInt($('rows').value)||1);
-      }
-      const upCount = finalCols*finalRows;
+      // "Up" = TOTAL source pages that end up on one final sheet, i.e. the
+      // product of each step's own up-count through the whole chain — Step 1's
+      // 2-up feeding a Step 2 4-up sheet is 8-up overall, not just 4.
+      // Overlay/text steps don't restructure the sheet, so they don't multiply.
+      let upCount = mode==='booklet' ? 2 : Math.max(1, parseInt($('cols').value)||1) * Math.max(1, parseInt($('rows').value)||1);
+      extraSteps.forEach(step=>{
+        if (step.type==='grid') upCount *= Math.max(1, step.cols||1) * Math.max(1, step.rows||1);
+        else if (step.type==='booklet') upCount *= 2;
+      });
       outputs.push({ name: `${doc.baseName} - impo ${upCount}up.pdf`, bytes: outBytes });
     }
 
