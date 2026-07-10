@@ -334,6 +334,8 @@
             </select>
           </div>
           <label class="checkline"><input type="checkbox" id="rtlBooklet"> Right-to-left reading order</label>
+          <label class="checkline"><input type="checkbox" id="rotateBookletSheet"> Rotate imposed booklet</label>
+          <p style="font-size:11.5px;color:var(--ink-soft);margin:6px 0 0;">Rotates each finished sheet as a whole (not the individual pages) — counter-clockwise on odd sheets, clockwise on even sheets.</p>
           <p style="font-size:11.5px;color:var(--ink-soft);margin:6px 0 0;">Saddle-stitch, 2 pages per side. Pages are padded to a multiple of 4.</p>
         </div>
         <div class="section-block">
@@ -955,7 +957,7 @@ const STEP1_FIELD_IDS = [
   'autoscale','bookletWhiteSpace','centerMarks','centerOnPage','cols','cropMarks','customH','customW',
   'doubleSided','duplexMode','gutterH','gutterMarks','gutterV','knockout','landscape','marginB','marginL','marginR','marginT',
   'markDistance','markLength','markThickness','paperSize','preserveAspect','registrationColor','repeatCount','repeatMode',
-  'rotateApply','rotatePage','rows','rtl','rtlBooklet'
+  'rotateApply','rotatePage','rows','rtl','rtlBooklet','rotateBookletSheet'
 ];
 
 function bufToBase64(buf){
@@ -1203,7 +1205,7 @@ function ensureExtGState(page, opts){
 
 
 [ 'rows','cols','landscape','margin','marginL','marginT','marginR','marginB','gutterH','gutterV',
-  'rtl','rtlBooklet','cropMarks','gutterMarks','centerMarks','markLength','markThickness','markDistance',
+  'rtl','rtlBooklet','rotateBookletSheet','cropMarks','gutterMarks','centerMarks','markLength','markThickness','markDistance',
   'registrationColor','knockout','duplexMode','repeatMode','doubleSided','preserveAspect','centerOnPage','rotatePage','rotateApply','repeatCount'
 ].forEach(id=>{ const el=$(id); if(el) el.addEventListener('input', update); });
 
@@ -1644,13 +1646,34 @@ function computeGeometry(sheet, w, h, pageDims){
 // Lightweight geometry for previewing an extra step's schematic layout,
 // using that step's own margin/gutter (computeGeometry is tied to Step 1's
 // global White Space fields and isn't appropriate here).
-function computeStepPreviewGeometry(step, w, h, cols, rows){
+function computeStepPreviewGeometry(step, w, h, sheet, getCellTrimDims){
   const marginL = mm2pt(step.marginL||0), marginT = mm2pt(step.marginT||0);
   const marginR = mm2pt(step.marginR||0), marginB = mm2pt(step.marginB||0);
   const gutterH = mm2pt(step.gutterH||0), gutterV = mm2pt(step.gutterV||0);
-  const blockW = w-marginL-marginR, blockH = h-marginT-marginB;
-  const cellW = (blockW-(cols-1)*gutterH)/cols, cellH = (blockH-(rows-1)*gutterV)/rows;
-  return {cellW, cellH, gutterH, gutterV, originX:marginL, originYTop:marginT, blockW, blockH};
+  const cols = sheet.cols, rows = sheet.rows;
+  const autoscale = step.type==='booklet' ? true : (step.autoscale !== false);
+  let cellW, cellH, blockW, blockH, originX, originYTop;
+  if (autoscale){
+    const availW = w-marginL-marginR-(cols-1)*gutterH, availH = h-marginT-marginB-(rows-1)*gutterV;
+    cellW = availW/cols; cellH = availH/rows;
+    blockW = availW; blockH = availH;
+    originX = marginL; originYTop = marginT;
+  } else {
+    // Natural size: cell pitch (and therefore the block) comes from what's
+    // actually being placed in THIS sheet's cells, not the nominal
+    // margin-derived area — exactly like imposeExtraStep's real math.
+    let maxW=1, maxH=1;
+    sheet.cells.forEach(idx=>{
+      if (idx==null) return;
+      const d = getCellTrimDims ? getCellTrimDims(idx) : null;
+      if (d){ maxW = Math.max(maxW, d.w); maxH = Math.max(maxH, d.h); }
+    });
+    cellW = maxW; cellH = maxH;
+    blockW = cols*cellW + (cols-1)*gutterH;
+    blockH = rows*cellH + (rows-1)*gutterV;
+    originX = Math.max(0, (w-blockW)/2); originYTop = Math.max(0, (h-blockH)/2);
+  }
+  return {cellW, cellH, gutterH, gutterV, originX, originYTop, blockW, blockH};
 }
 
 // Renders crop/gutter/center marks for the on-screen preview, using the exact
@@ -1792,20 +1815,12 @@ function addMeasuredMarks(sheetFrameEl, cols, rows, scale){
   }
 }
 
-// Mirrors embedIntoCell's math exactly — scale, bleed-allowance capping on
-// internal vs outer edges, and source-space crop rectangle — so the preview
-// shows the same bleed spilling into gutters (and margin, up to the sheet
-// edge) that the real PDF embed produces. The source thumbnail was rendered
-// from the page's CropBox, so the crop rectangle (trim ± allowed bleed) is
-// remapped onto thumbnail pixel space via background-image crop/scale
-// (an <img> can't do an arbitrary crop; a sized/positioned background can).
-function computeCellBleedHtml(doc, idx, rot, cellW, cellH, gutterH, gutterV, edges, autoscale, preserveAspect, psc){
-  const boxes = doc.pageBoxes && doc.pageBoxes[idx];
-  const td = doc.thumbDims && doc.thumbDims[idx];
-  const thumb = doc.thumbs[idx] || '';
-  if (!boxes || !td) return `<img src="${thumb}">`; // safety fallback
-
-  const trimBox = boxes.trimBox, bleed = boxes.bleed;
+// Shared geometry for "embed trimBox+bleed into a cell" — exactly mirrors
+// embedIntoCell's math (scale, per-edge bleed capping, rotation swap) and
+// returns everything needed to position/size the bled content, regardless
+// of what that content actually is (a source-page thumbnail crop, or a
+// nested composite of an already-imposed sheet).
+function computeCellBleedGeometry(trimBox, bleed, rot, cellW, cellH, gutterH, gutterV, edges, autoscale, preserveAspect, psc){
   const swapped = (rot===90 || rot===270);
   const effTrimW = swapped ? trimBox.height : trimBox.width;
   const effTrimH = swapped ? trimBox.width  : trimBox.height;
@@ -1829,35 +1844,18 @@ function computeCellBleedHtml(doc, idx, rot, cellW, cellH, gutterH, gutterV, edg
   };
   const srcAllow = rotateBleed(outAllow, (360-rot)%360);
 
-  // Crop rectangle in the SOURCE page's own pt-space — exactly what pdf-lib embeds.
+  // Crop rectangle in the SOURCE content's own pt-space — exactly what pdf-lib embeds.
   const cropLeftPt = trimBox.x - srcAllow.left;
   const cropBottomPt = trimBox.y - srcAllow.bottom;
   const cropRightPt = trimBox.x + trimBox.width + srcAllow.right;
   const cropTopPt = trimBox.y + trimBox.height + srcAllow.top;
   const embWidthPt = cropRightPt - cropLeftPt, embHeightPt = cropTopPt - cropBottomPt;
 
-  // Map that crop rect onto the thumbnail's own pixel space (rendered from CropBox).
-  const ref = td.refBox;
-  const thumbScaleX = td.w/ref.width, thumbScaleY = td.h/ref.height;
-  const pxLeft = (cropLeftPt-ref.x)*thumbScaleX;
-  const pxRight = (cropRightPt-ref.x)*thumbScaleX;
-  const pxTop = (ref.y+ref.height-cropTopPt)*thumbScaleY;
-  const pxBottom = (ref.y+ref.height-cropBottomPt)*thumbScaleY;
-  const cropWpx = pxRight-pxLeft, cropHpx = pxBottom-pxTop;
-
-  // Local (pre-rotation, source-oriented) drawn box size, in preview px.
   const localScaleX = swapped ? scaleY : scaleX;
   const localScaleY = swapped ? scaleX : scaleY;
   const localBoxWpx = embWidthPt*localScaleX*psc;
   const localBoxHpx = embHeightPt*localScaleY*psc;
 
-  const factorX = cropWpx>0 ? localBoxWpx/cropWpx : 1;
-  const factorY = cropHpx>0 ? localBoxHpx/cropHpx : 1;
-  const bgSizeWpx = td.w*factorX, bgSizeHpx = td.h*factorY;
-  const bgPosXpx = -pxLeft*factorX, bgPosYpx = -pxTop*factorY;
-
-  // Output-space (rotation-aware) footprint & position within the cell —
-  // the trim block centered as usual, plus bleed extending outward per edge.
   const trimDrawWpx = effTrimW*scaleX*psc, trimDrawHpx = effTrimH*scaleY*psc;
   const cellWpx = cellW*psc, cellHpx = cellH*psc;
   const trimOriginXpx = (cellWpx-trimDrawWpx)/2, trimOriginYpx = (cellHpx-trimDrawHpx)/2;
@@ -1866,9 +1864,94 @@ function computeCellBleedHtml(doc, idx, rot, cellW, cellH, gutterH, gutterV, edg
   const containerLeftPx = trimOriginXpx-extendLeftPx, containerTopPx = trimOriginYpx-extendTopPx;
   const containerWpx = trimDrawWpx+extendLeftPx+extendRightPx, containerHpx = trimDrawHpx+extendTopPx+extendBottomPx;
 
+  // Where the trim box itself sits within the local (pre-rotation) content
+  // box — needed by content that isn't a simple crop (e.g. a nested composite).
+  const blockOffXpx = (trimBox.x-cropLeftPt)*localScaleX*psc;
+  const blockOffYpx = (cropTopPt-(trimBox.y+trimBox.height))*localScaleY*psc;
+  const blockWpx = trimBox.width*localScaleX*psc, blockHpx = trimBox.height*localScaleY*psc;
+
+  return {
+    localScaleX, localScaleY, localBoxWpx, localBoxHpx,
+    containerLeftPx, containerTopPx, containerWpx, containerHpx,
+    blockOffXpx, blockOffYpx, blockWpx, blockHpx,
+    cropLeftPt, cropTopPt, embWidthPt, embHeightPt
+  };
+}
+
+// Mirrors embedIntoCell's math exactly — scale, bleed-allowance capping on
+// internal vs outer edges, and source-space crop rectangle — so the preview
+// shows the same bleed spilling into gutters (and margin, up to the sheet
+// edge) that the real PDF embed produces. The source thumbnail was rendered
+// from the page's CropBox, so the crop rectangle (trim ± allowed bleed) is
+// remapped onto thumbnail pixel space via background-image crop/scale
+// (an <img> can't do an arbitrary crop; a sized/positioned background can).
+function computeCellBleedHtml(doc, idx, rot, cellW, cellH, gutterH, gutterV, edges, autoscale, preserveAspect, psc){
+  const boxes = doc.pageBoxes && doc.pageBoxes[idx];
+  const td = doc.thumbDims && doc.thumbDims[idx];
+  const thumb = doc.thumbs[idx] || '';
+  if (!boxes || !td) return `<img src="${thumb}">`; // safety fallback
+
+  const trimBox = boxes.trimBox, bleed = boxes.bleed;
+  const g = computeCellBleedGeometry(trimBox, bleed, rot, cellW, cellH, gutterH, gutterV, edges, autoscale, preserveAspect, psc);
+
+  // Map the crop rect onto the thumbnail's own pixel space (rendered from CropBox).
+  const ref = td.refBox;
+  const thumbScaleX = td.w/ref.width, thumbScaleY = td.h/ref.height;
+  const pxLeft = (g.cropLeftPt-ref.x)*thumbScaleX;
+  const pxTop = (ref.y+ref.height-g.cropTopPt)*thumbScaleY;
+  const cropWpx = g.embWidthPt*thumbScaleX, cropHpx = g.embHeightPt*thumbScaleY;
+
+  const factorX = cropWpx>0 ? g.localBoxWpx/cropWpx : 1;
+  const factorY = cropHpx>0 ? g.localBoxHpx/cropHpx : 1;
+  const bgSizeWpx = td.w*factorX, bgSizeHpx = td.h*factorY;
+  const bgPosXpx = -pxLeft*factorX, bgPosYpx = -pxTop*factorY;
+
   const rotatePart = rot ? `rotate(-${rot}deg)` : '';
-  return `<div style="position:absolute;left:${containerLeftPx}px;top:${containerTopPx}px;width:${containerWpx}px;height:${containerHpx}px;overflow:hidden;">
-    <div style="position:absolute;top:50%;left:50%;width:${localBoxWpx}px;height:${localBoxHpx}px;margin-left:${-localBoxWpx/2}px;margin-top:${-localBoxHpx/2}px;background-image:url('${thumb}');background-repeat:no-repeat;background-size:${bgSizeWpx}px ${bgSizeHpx}px;background-position:${bgPosXpx}px ${bgPosYpx}px;${rotatePart?`transform:${rotatePart};`:''}"></div>
+  return `<div style="position:absolute;left:${g.containerLeftPx}px;top:${g.containerTopPx}px;width:${g.containerWpx}px;height:${g.containerHpx}px;overflow:hidden;">
+    <div style="position:absolute;top:50%;left:50%;width:${g.localBoxWpx}px;height:${g.localBoxHpx}px;margin-left:${-g.localBoxWpx/2}px;margin-top:${-g.localBoxHpx/2}px;background-image:url('${thumb}');background-repeat:no-repeat;background-size:${bgSizeWpx}px ${bgSizeHpx}px;background-position:${bgPosXpx}px ${bgPosYpx}px;${rotatePart?`transform:${rotatePart};`:''}"></div>
+  </div>`;
+}
+
+// Step 2+ cells impose an already-composed Step-1 sheet, not a raw source
+// page — same bleed math, but Step 1's own BleedBox is the *whole sheet*,
+// so what "bleeds" into the Step-2 gutter is just Step 1's blank margin
+// (there's no artwork to crop there). Rather than a background-image crop,
+// render a true-to-scale white sheet with Step 1's own bled cell grid
+// positioned inside it, so the geometry — and the honest blank margin —
+// matches the real PDF exactly instead of an arbitrary placeholder box.
+function computeNestedSheetBleedHtml(doc, srcSheet, rot, cellW, cellH, gutterH, gutterV, edges, autoscale, preserveAspect, psc, rotVal){
+  const step1Dims = getSheetDims(doc);
+  const srcGeo = computeGeometry(srcSheet, step1Dims.w, step1Dims.h, getEffectivePageDims(doc));
+  const trimBox = { x: srcGeo.originX, y: step1Dims.h-srcGeo.originYTop-srcGeo.blockH, width: srcGeo.blockW, height: srcGeo.blockH };
+  const bleed = {
+    left: srcGeo.originX,
+    right: step1Dims.w-srcGeo.originX-srcGeo.blockW,
+    top: srcGeo.originYTop,
+    bottom: step1Dims.h-srcGeo.originYTop-srcGeo.blockH
+  };
+  const g = computeCellBleedGeometry(trimBox, bleed, rot, cellW, cellH, gutterH, gutterV, edges, autoscale, preserveAspect, psc);
+
+  const nestedPscX = srcGeo.blockW>0 ? g.blockWpx/srcGeo.blockW : psc;
+  const nestedPscY = srcGeo.blockH>0 ? g.blockHpx/srcGeo.blockH : psc;
+  const nestedPsc = Math.min(nestedPscX, nestedPscY) || psc;
+  const nestedAutoscale = $('autoscale').checked;
+  const nestedPreserveAspect = $('preserveAspect').checked || !nestedAutoscale;
+  const nestedCellsHtml = srcSheet.cells.map((srcIdx,jj)=>{
+    if (srcIdx===null) return `<div class="cell blank" style="border:none;"></div>`;
+    const srcCellRot = effectiveRotation(srcIdx, rotVal);
+    const rr = Math.floor(jj/srcSheet.cols), cc = jj%srcSheet.cols;
+    const innerEdges = {left:cc===0, right:cc===srcSheet.cols-1, top:rr===0, bottom:rr===srcSheet.rows-1};
+    const inner = computeCellBleedHtml(doc, srcIdx, srcCellRot, srcGeo.cellW, srcGeo.cellH, srcGeo.gutterH, srcGeo.gutterV, innerEdges, nestedAutoscale, nestedPreserveAspect, nestedPsc);
+    return `<div class="cell" style="border:none;overflow:visible;">${inner}</div>`;
+  }).join('');
+
+  const rotatePart = rot ? `rotate(-${rot}deg)` : '';
+  return `<div style="position:absolute;left:${g.containerLeftPx}px;top:${g.containerTopPx}px;width:${g.containerWpx}px;height:${g.containerHpx}px;overflow:hidden;">
+    <div style="position:absolute;top:50%;left:50%;width:${g.localBoxWpx}px;height:${g.localBoxHpx}px;margin-left:${-g.localBoxWpx/2}px;margin-top:${-g.localBoxHpx/2}px;background:#fff;overflow:hidden;${rotatePart?`transform:${rotatePart};`:''}">
+      <div style="position:absolute;left:${g.blockOffXpx}px;top:${g.blockOffYpx}px;width:${g.blockWpx}px;height:${g.blockHpx}px;display:grid;grid-template-columns:repeat(${srcSheet.cols},minmax(0,1fr));grid-template-rows:repeat(${srcSheet.rows},minmax(0,1fr));gap:${srcGeo.gutterV*nestedPsc}px ${srcGeo.gutterH*nestedPsc}px;">
+        ${nestedCellsHtml}
+      </div>
+    </div>
   </div>`;
 }
 
@@ -1884,7 +1967,7 @@ function update(){
   let chainCount = layout.length;
   let stepBeforeSheets = layout;
   let finalSheets = layout, finalW = w, finalH = h, finalStepNum = 1, finalStepDef = null;
-  let finalInputSheets = null, finalInputIsStep1 = false;
+  let finalInputSheets = null, finalInputIsStep1 = false, finalInputStepDef = null;
   extraSteps.forEach((step, i)=>{
     if (step.type==='overlay' || step.type==='text'){
       const label = step.type==='overlay' ? 'Overlay image' : 'Add text';
@@ -1896,6 +1979,7 @@ function update(){
     summaryHtml += `<br><span class="n">${chainCount}</span> in &rarr; <span class="n">${sheets.length}</span> output sheet${sheets.length!==1?'s':''} (Step ${i+2}, ${step.type}) · ${pt2mm(dims.w).toFixed(1)}&times;${pt2mm(dims.h).toFixed(1)}mm`;
     finalInputSheets = stepBeforeSheets;
     finalInputIsStep1 = (i===0);
+    finalInputStepDef = finalInputIsStep1 ? null : finalStepDef;
     chainCount = sheets.length;
     finalSheets = sheets; finalW = dims.w; finalH = dims.h; finalStepNum = i+2; finalStepDef = step;
     stepBeforeSheets = sheets;
@@ -1909,14 +1993,38 @@ function update(){
   const cropOn = $('cropMarks').checked;
   const isFinalStepOne = (finalStepNum === 1);
 
+  // What a cell in the FINAL step is actually made of — needed to replicate
+  // imposeExtraStep's natural-size math (cell pitch = the real size of
+  // what's being placed, not a nominal margin-derived guess).
+  function getCellTrimDimsForFinal(idx){
+    if (!finalInputSheets) return null;
+    const inputSheet = finalInputSheets[idx];
+    if (!inputSheet) return null;
+    if (finalInputIsStep1){
+      const g = computeGeometry(inputSheet, w, h, getEffectivePageDims(doc));
+      return { w: g.blockW, h: g.blockH };
+    }
+    if (finalInputStepDef){
+      const pdims = getStepPaperDims(finalInputStepDef);
+      const pg = computeStepPreviewGeometry(finalInputStepDef, pdims.w, pdims.h, inputSheet, null);
+      return { w: pg.blockW, h: pg.blockH };
+    }
+    return null;
+  }
+
   $('sheetsGrid').innerHTML = finalSheets.map(sheet=>{
     const geo = isFinalStepOne
       ? computeGeometry(sheet, finalW, finalH, getEffectivePageDims(doc))
-      : computeStepPreviewGeometry(finalStepDef, finalW, finalH, sheet.cols, sheet.rows);
+      : computeStepPreviewGeometry(finalStepDef, finalW, finalH, sheet, getCellTrimDimsForFinal);
     const pw = finalW*scale, ph = finalH*scale;
     const rotVal = parseInt($('rotatePage').value)||0;
     const autoscaleOn = $('autoscale').checked;
     const preserveAspectOn = $('preserveAspect').checked || !autoscaleOn;
+    // Step 2+'s own rotate/autoscale/preserveAspect (imposeExtraStep treats
+    // booklet steps as always autoscale+preserveAspect, same as here).
+    const stepRot = isFinalStepOne ? 0 : (parseInt(finalStepDef.rotate)||0);
+    const stepAutoscale = isFinalStepOne ? autoscaleOn : (finalStepDef.type==='booklet' ? true : (finalStepDef.autoscale !== false));
+    const stepPreserveAspect = isFinalStepOne ? preserveAspectOn : (finalStepDef.type==='booklet' ? true : (finalStepDef.preserveAspect !== false));
     const cellsHtml = sheet.cells.map((idx,j)=>{
       if (idx===null) return `<div class="cell blank"></div>`;
       if (isFinalStepOne){
@@ -1928,21 +2036,16 @@ function update(){
       }
       // Extra steps impose already-composed sheets, not source pages. When
       // the sheet feeding this step is Step 1's own output, we know exactly
-      // which source thumbnails it contains, so nest a small real preview
-      // of it instead of a bare placeholder number.
+      // which source thumbnails it contains, so nest a real bleed-aware
+      // preview of it (Step 1's own BleedBox is its whole sheet, so what
+      // "bleeds" into this step's gutter is Step 1's honest blank margin —
+      // matching the real embed exactly instead of a placeholder box).
       const srcSheet = finalInputSheets ? finalInputSheets[idx] : null;
       if (finalInputIsStep1 && srcSheet){
-        const nestedCells = srcSheet.cells.map(srcIdx => {
-          if (srcIdx===null) return `<div class="cell blank" style="border:none;"></div>`;
-          const cellRot = effectiveRotation(srcIdx, rotVal);
-          const style = cellRot ? ` style="transform:rotate(-${cellRot}deg);"` : '';
-          return `<div class="cell" style="border:none;"><img src="${doc.thumbs[srcIdx] || ''}"${style}></div>`;
-        }).join('');
-        return `<div class="cell" style="padding:0;overflow:hidden;">
-          <div style="display:grid;width:100%;height:100%;grid-template-columns:repeat(${srcSheet.cols},minmax(0,1fr));grid-template-rows:repeat(${srcSheet.rows},minmax(0,1fr));gap:1px;">
-            ${nestedCells}
-          </div>
-        </div>`;
+        const r = Math.floor(j/sheet.cols), c = j%sheet.cols;
+        const edges = {left:c===0, right:c===sheet.cols-1, top:r===0, bottom:r===sheet.rows-1};
+        const inner = computeNestedSheetBleedHtml(doc, srcSheet, stepRot, geo.cellW, geo.cellH, geo.gutterH, geo.gutterV, edges, stepAutoscale, stepPreserveAspect, scale, rotVal);
+        return `<div class="cell" style="overflow:visible;">${inner}</div>`;
       }
       return `<div class="cell" style="font-family:var(--mono);font-size:13px;color:var(--ink-soft);">${idx+1}</div>`;
     }).join('');
@@ -1964,11 +2067,15 @@ function update(){
   // Marks are added in a second pass, after the sheets are actually in the
   // DOM, so they're measured from the real rendered grid — guaranteed to
   // line up exactly with what's shown, trimbox edge to trimbox edge.
-  document.querySelectorAll('#sheetsGrid .sheet-outer').forEach((outerEl, i)=>{
-    const sheet = finalSheets[i];
-    const frameEl = outerEl.querySelector('.sheet-frame');
-    if (sheet && frameEl) addMeasuredMarks(frameEl, sheet.cols, sheet.rows, scale);
-  });
+  // Only Step 1 actually draws new marks in the real PDF; Step 2+ just
+  // embeds Step 1's already-marked pages, so no new marks are drawn there.
+  if (isFinalStepOne){
+    document.querySelectorAll('#sheetsGrid .sheet-outer').forEach((outerEl, i)=>{
+      const sheet = finalSheets[i];
+      const frameEl = outerEl.querySelector('.sheet-frame');
+      if (sheet && frameEl) addMeasuredMarks(frameEl, sheet.cols, sheet.rows, scale);
+    });
+  }
 }
 
 // ---- printer's marks drawing (pdf-lib) ----
@@ -2140,7 +2247,10 @@ $('generateBtn').addEventListener('click', async ()=>{
       const embedCache = {};
       const getBoxesCached = (idx) => boxCache[idx] || (boxCache[idx] = getBoxes(srcPages[idx]));
 
-      for(const sheet of layout){
+      const rotateBookletSheets = mode==='booklet' && $('rotateBookletSheet').checked;
+
+      for(let sheetIdx=0; sheetIdx<layout.length; sheetIdx++){
+        const sheet = layout[sheetIdx];
         const page = outDoc.addPage([w,h]);
         const geo = computeGeometry(sheet, w, h, getEffectivePageDims(doc));
         const {cellW, cellH, gutterH, gutterV, originX, originYTop} = geo;
@@ -2230,6 +2340,14 @@ $('generateBtn').addEventListener('click', async ()=>{
         // is still captured if this result gets fed into a further chained step.
         setClampedTrimBox(page, geo.originX, h-geo.originYTop-geo.blockH, geo.blockW, geo.blockH, w, h);
         try{ page.setBleedBox(0, 0, w, h); }catch(e){}
+
+        // Whole-sheet rotation (booklet only): rotates the finished sheet as
+        // a unit, not the individual pages drawn onto it. /Rotate is always
+        // expressed clockwise in PDF, so "CCW" = 270, "CW" = 90.
+        if (rotateBookletSheets){
+          const sheetNum = sheetIdx+1; // 1-indexed, matches "odd/even sheet"
+          page.setRotation(PDFLib.degrees(sheetNum % 2 === 1 ? 270 : 90));
+        }
       }
 
       let chainBytes = await outDoc.save();
